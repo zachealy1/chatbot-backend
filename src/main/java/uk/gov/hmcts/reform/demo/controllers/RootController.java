@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
 import java.util.Map;
 
@@ -41,9 +42,16 @@ public class RootController {
 
         logger.info("User sent message: {}", message);
 
-        String response = "Chatbot response to your message: " + message;
+        try {
+            String response = ChatGptApi.chatGpt(message);
 
-        return ok(response);
+            logger.info("ChatGPT response: {}", response);
+
+            return ok(response);
+        } catch (RuntimeException e) {
+            logger.error("Error while communicating with ChatGPT API: {}", e.getMessage());
+            return badRequest().body("An error occurred while processing your request. Please try again later.");
+        }
     }
 
     @PostMapping("/register")
