@@ -1,5 +1,7 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,9 +18,32 @@ import static org.springframework.http.ResponseEntity.ok;
 @RequestMapping("/")
 public class RootController {
 
+    private static final Logger logger = LoggerFactory.getLogger(RootController.class);
+
     @GetMapping
     public ResponseEntity<String> welcome() {
         return ok("Welcome to the chatbot backend service");
+    }
+
+    /**
+     * Chat endpoint to handle user queries and return chatbot responses.
+     *
+     * @param userInput A map containing the user's input message.
+     * @return Simulated chatbot response.
+     */
+    @PostMapping("/chat")
+    public ResponseEntity<String> chat(@RequestBody Map<String, String> userInput) {
+        String message = userInput.get("message");
+
+        if (message == null || message.trim().isEmpty()) {
+            return badRequest().body("Message cannot be empty. Please provide a valid input.");
+        }
+
+        logger.info("User sent message: {}", message);
+
+        String response = "Chatbot response to your message: " + message;
+
+        return ok(response);
     }
 
     @PostMapping("/register")
