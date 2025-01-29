@@ -2,14 +2,13 @@ server:
   port: 4550
   shutdown: "graceful"
 
-# If you use a database then uncomment the `group:, readiness: and include: "db"` lines in the health probes and uncomment the datasource section
 management:
   endpoint:
     health:
       show-details: "always"
-      # group:
-      #  readiness:
-      #   include: "db"
+      group:
+        readiness:
+          include: "db"
   endpoints:
     web:
       base-path: /
@@ -17,35 +16,43 @@ management:
         include: health, info, prometheus
 
 springdoc:
-  packagesToScan: uk.gov.hmcts.reform.demo.controllers
+  packagesToScan:
+    - uk.gov.hmcts.reform.demo.controllers
+    - uk.gov.hmcts.reform.demo.repositories
+    - uk.gov.hmcts.reform.demo.entities
   writer-with-order-by-keys: true
+
 
 spring:
   config:
     import: "optional:configtree:/mnt/secrets/rpe/"
   application:
     name: Spring Boot Template
-#  datasource:
-#    driver-class-name: org.postgresql.Driver
-#    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}${DB_OPTIONS:}
-#    username: ${DB_USER_NAME}
-#    password: ${DB_PASSWORD}
-#    properties:
-#      charSet: UTF-8
-#    hikari:
-#      minimumIdle: 2
-#      maximumPoolSize: 10
-#      idleTimeout: 10000
-#      poolName: {to-be-defined}HikariCP
-#      maxLifetime: 7200000
-#      connectionTimeout: 30000
-#  jpa:
-#    properties:
-#      hibernate:
-#        jdbc:
-#          lob:
-#            # silence the 'wall-of-text' - unnecessary exception throw about blob types
-#            non_contextual_creation: true
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://localhost:5432/chatbotdb
+    username: ${DB_USER_NAME:postgres}
+    password: ${DB_PASSWORD:password}
+    properties:
+      charSet: UTF-8
+    hikari:
+      minimumIdle: 2
+      maximumPoolSize: 10
+      idleTimeout: 10000
+      poolName: chatbotHikariCP
+      maxLifetime: 7200000
+      connectionTimeout: 30000
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc:
+          lob:
+            non_contextual_creation: true
 
 azure:
   application-insights:
