@@ -3,12 +3,16 @@ package uk.gov.hmcts.reform.demo.controllers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import uk.gov.hmcts.reform.demo.entities.Chat;
+import uk.gov.hmcts.reform.demo.entities.Message;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
+import uk.gov.hmcts.reform.demo.services.ChatService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
 import java.time.LocalDate;
@@ -25,9 +29,26 @@ public class RootController {
     private static final Logger logger = LoggerFactory.getLogger(RootController.class);
 
     private final UserRepository userRepository;
+    private final ChatService chatService;
+    private final PasswordEncoder passwordEncoder;
+    private final ChatGptApi chatGptApi;
 
-    public RootController(UserRepository userRepository) {
+    /**
+     * Constructor for RootController.
+     *
+     * @param userRepository  The UserRepository for accessing user data.
+     * @param chatService     The ChatService for handling chat operations.
+     * @param passwordEncoder The PasswordEncoder for hashing passwords.
+     * @param chatGptApi      The ChatGptApi for communicating with the ChatGPT API.
+     */
+    public RootController(UserRepository userRepository,
+                          ChatService chatService,
+                          PasswordEncoder passwordEncoder,
+                          ChatGptApi chatGptApi) {
         this.userRepository = userRepository;
+        this.chatService = chatService;
+        this.passwordEncoder = passwordEncoder;
+        this.chatGptApi = chatGptApi;
     }
 
     @GetMapping("/")
@@ -38,28 +59,84 @@ public class RootController {
     /**
      * Chat endpoint to handle user queries and return chatbot responses.
      *
-     * @param userInput A map containing the user's input message.
-     * @return Simulated chatbot response.
+     * @param userInput A map containing the user's input message and optional chatId.
+     * @return Chatbot response along with chatId.
      */
     @PostMapping("/chat")
-    public ResponseEntity<String> chat(@RequestBody Map<String, String> userInput) {
+    public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, String> userInput) {
         String message = userInput.get("message");
+        String chatIdStr = userInput.get("chatId"); // Optional parameter to identify existing chat
+        Long chatId = null;
+
+        if (chatIdStr != null) {
+            try {
+                chatId = Long.parseLong(chatIdStr);
+            } catch (NumberFormatException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid chatId format."));
+            }
+        }
 
         if (message == null || message.trim().isEmpty()) {
-            return badRequest().body("Message cannot be empty. Please provide a valid input.");
+            return ResponseEntity.badRequest().body(Map.of("error", "Message cannot be empty. Please provide "
+                + "a valid input."));
         }
 
         logger.info("User sent message: {}", message);
 
         try {
-            String response = ChatGptApi.chatGpt(message);
+            // TODO: Implement user identification logic here
+            // For example, retrieve user from session or authentication token
+            // For demonstration, we'll assume a user with ID 1 exists
+            Optional<User> optionalUser = userRepository.findById(1L);
+            if (!optionalUser.isPresent()) {
+                return ResponseEntity.badRequest().body(Map.of("error", "User not found."));
+            }
+            User user = optionalUser.get();
 
+            Chat chat;
+            if (chatId != null) {
+                Long finalChatId = chatId;
+                Optional<Chat> optionalChat = chatService.getChatsForUser(user).stream()
+                    .filter(c -> c.getId().equals(finalChatId))
+                    .findFirst();
+                if (optionalChat.isPresent()) {
+                    chat = optionalChat.get();
+                } else {
+                    // If chatId is provided but not found for the user, create a new chat with a summarized description
+                    String summary = chatGptApi.summarize(message);
+                    chat = chatService.createChat(user, summary);
+                    chatId = chat.getId(); // Update chatId to the new chat's ID
+                }
+            } else {
+                // Create a new chat with a summarized description if chatId is not provided
+                String summary = chatGptApi.summarize(message);
+                chat = chatService.createChat(user, summary);
+                chatId = chat.getId();
+            }
+
+            // Save user's message
+            Message userMessage = chatService.saveMessage(chat, "user", message);
+            logger.info("Saved user message: {}", message);
+
+            // Get response from ChatGPT
+            String response = chatGptApi.chatGpt(message);
             logger.info("ChatGPT response: {}", response);
 
-            return ok(response);
+            // Save chatbot's response
+            Message botMessage = chatService.saveMessage(chat, "chatbot", response);
+            logger.info("Saved chatbot response: {}", response);
+
+            // Prepare response with chatId and chatbot message
+            Map<String, Object> responseBody = Map.of(
+                "chatId", chatId,
+                "message", response
+                                                     );
+
+            return ResponseEntity.ok(responseBody);
         } catch (RuntimeException e) {
             logger.error("Error while communicating with ChatGPT API: {}", e.getMessage());
-            return badRequest().body("An error occurred while processing your request. Please try again later.");
+            return ResponseEntity.badRequest().body(Map.of("error", "An error occurred while "
+                + "processing your request. Please try again later."));
         }
     }
 
@@ -90,8 +167,11 @@ public class RootController {
             return badRequest().body(existenceError);
         }
 
+        // Hash the password
+        String hashedPassword = hashPassword(password);
+
         // Create and save the new user
-        User newUser = createNewUser(username, email, password, dateOfBirth);
+        User newUser = createNewUser(username, email, hashedPassword, dateOfBirth);
         userRepository.save(newUser);
 
         return ok("User registered successfully.");
@@ -275,5 +355,15 @@ public class RootController {
         newUser.setPasswordHash(hashedPassword);
         newUser.setDateOfBirth(dateOfBirth);
         return newUser;
+    }
+
+    /**
+     * Hashes the plain-text password using BCrypt.
+     *
+     * @param password The plain-text password.
+     * @return The hashed password.
+     */
+    private String hashPassword(String password) {
+        return passwordEncoder.encode(password);
     }
 }

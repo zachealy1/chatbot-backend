@@ -22,6 +22,9 @@ springdoc:
     - uk.gov.hmcts.reform.demo.entities
   writer-with-order-by-keys: true
 
+openai:
+  api:
+    key: ${CGI_OPENAI_KEY}
 
 spring:
   config:

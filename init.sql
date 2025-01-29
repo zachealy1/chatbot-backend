@@ -30,6 +30,7 @@ CREATE TABLE password_reset_tokens (
 CREATE TABLE chats (
                      id SERIAL PRIMARY KEY,
                      user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                     description TEXT NOT NULL,
                      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

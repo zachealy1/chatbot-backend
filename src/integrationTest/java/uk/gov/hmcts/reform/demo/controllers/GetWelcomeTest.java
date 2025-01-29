@@ -34,10 +34,6 @@ class GetWelcomeTest {
     @DisplayName("Should welcome upon root request with 200 response code")
     @Test
     void welcomeRootEndpoint() throws Exception {
-        // Since the GET "/" endpoint doesn't interact with UserRepository,
-        // there's no need to define specific behavior for the mock.
-        // However, if your controller logic changes in the future to use the repository,
-        // you can configure the mock accordingly.
 
         String expectedResponse = "Welcome to the chatbot backend service";
 
