@@ -26,6 +26,9 @@ public class PasswordResetToken {
     @Column(nullable = false, unique = true)
     private String token;
 
+    @Column(nullable = false)
+    private boolean used = false;
+
     @Column(name = "expires_at", nullable = false)
     private LocalDateTime expiryDate;
 
@@ -39,6 +42,7 @@ public class PasswordResetToken {
     public PasswordResetToken(User user, String token) {
         this.user = user;
         this.token = token;
+        this.used = false;
         this.expiryDate = LocalDateTime.now().plusMinutes(10);
     }
 
@@ -68,6 +72,14 @@ public class PasswordResetToken {
 
     public void setToken(String token) {
         this.token = token;
+    }
+
+    public boolean isUsed() {
+        return used;
+    }
+
+    public void setUsed(boolean used) {
+        this.used = used;
     }
 
     public LocalDateTime getExpiryDate() {

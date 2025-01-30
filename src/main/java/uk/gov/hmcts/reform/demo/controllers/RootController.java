@@ -326,33 +326,74 @@ public class RootController {
             return badRequest().body("The OTP has expired. Please request a new one.");
         }
 
-        // ✅ Use passwordEncoder.matches() to compare hashed OTP
+        // Verify the OTP using password hashing
         if (!passwordEncoder.matches(otp, resetToken.getToken())) {
             return badRequest().body("The one-time password is incorrect. Please try again.");
         }
 
-        // If OTP is verified, remove it from the database (optional)
-        passwordResetTokenRepository.delete(resetToken);
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
 
-        return ok("OTP verified successfully.");
+        return ok("OTP verified successfully. Proceed to reset your password.");
     }
 
 
     @PostMapping("/forgot-password/reset-password")
-    public ResponseEntity<String> resetPassword(@RequestBody Map<String, String> passwords) {
-        String password = passwords.get("password");
-        String confirmPassword = passwords.get("confirmPassword");
+    public ResponseEntity<String> resetPassword(@RequestBody Map<String, String> requestBody) {
+        String email = requestBody.get("email");
+        String otp = requestBody.get("otp");
+        String password = requestBody.get("password");
+        String confirmPassword = requestBody.get("confirmPassword");
 
+        if (email == null || otp == null || password == null || confirmPassword == null) {
+            return badRequest().body("Email, OTP, and passwords are required.");
+        }
+
+        // Check if passwords match
         if (!password.equals(confirmPassword)) {
             return badRequest().body("Passwords do not match.");
         }
 
+        // Validate password strength
         if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$")) {
             return badRequest().body(
                 "Password must be at least 8 characters long and include an uppercase letter, "
                     + "a lowercase letter, a number, and a special character."
                                     );
         }
+
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (!optionalUser.isPresent()) {
+            return badRequest().body("No account found with this email address.");
+        }
+
+        User user = optionalUser.get();
+
+        // Retrieve the OTP from the database
+        Optional<PasswordResetToken> optionalResetToken = passwordResetTokenRepository.findByUser(user);
+        if (!optionalResetToken.isPresent()) {
+            return badRequest().body("No OTP request found. Please request a password reset first.");
+        }
+
+        PasswordResetToken resetToken = optionalResetToken.get();
+
+        // Check if the OTP is expired
+        if (resetToken.isExpired()) {
+            return badRequest().body("The OTP has expired. Please request a new one.");
+        }
+
+        // ✅ Ensure the OTP was verified before resetting the password
+        if (!resetToken.isUsed()) {
+            return badRequest().body("OTP verification required before resetting the password.");
+        }
+
+        // Hash and update the new password
+        String hashedPassword = passwordEncoder.encode(password);
+        user.setPasswordHash(hashedPassword);
+        userRepository.save(user);
+
+        // ✅ Delete the OTP after successful password reset
+        passwordResetTokenRepository.delete(resetToken);
 
         return ok("Password reset successfully.");
     }
@@ -507,7 +548,6 @@ public class RootController {
 
         emailService.sendPasswordResetEmail(user.getEmail(), rawOtp);
     }
-
 
     /**
      * Generates a 6-digit OTP.
