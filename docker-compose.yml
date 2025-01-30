@@ -38,6 +38,10 @@ services:
       - DB_NAME=chatbotdb
       - DB_USER_NAME=postgres
       - DB_PASSWORD=password
+
+      # Mail server environment variables
+      - MAIL_USERNAME=${MAIL_USERNAME}
+      - MAIL_PASSWORD=${MAIL_PASSWORD}
     ports:
       - $SERVER_PORT:$SERVER_PORT
     depends_on:

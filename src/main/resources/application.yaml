@@ -31,6 +31,17 @@ spring:
     import: "optional:configtree:/mnt/secrets/rpe/"
   application:
     name: Spring Boot Template
+  mail:
+    host: app.debugmail.io
+    port: 9025
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
   datasource:
     driver-class-name: org.postgresql.Driver

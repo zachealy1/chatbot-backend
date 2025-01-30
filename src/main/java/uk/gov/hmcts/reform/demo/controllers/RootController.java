@@ -11,11 +11,14 @@ import org.springframework.web.bind.annotation.RestController;
 import uk.gov.hmcts.reform.demo.dto.LoginRequest;
 import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.Message;
+import uk.gov.hmcts.reform.demo.entities.PasswordResetToken;
 import uk.gov.hmcts.reform.demo.entities.Session;
 import uk.gov.hmcts.reform.demo.entities.User;
+import uk.gov.hmcts.reform.demo.repositories.PasswordResetTokenRepository;
 import uk.gov.hmcts.reform.demo.repositories.SessionRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 import uk.gov.hmcts.reform.demo.services.ChatService;
+import uk.gov.hmcts.reform.demo.services.EmailService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
 import java.time.LocalDate;
@@ -38,6 +41,8 @@ public class RootController {
     private final PasswordEncoder passwordEncoder;
     private final ChatGptApi chatGptApi;
     private final SessionRepository sessionRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
+    private final EmailService emailService;
 
     /**
      * Constructor for RootController.
@@ -47,17 +52,23 @@ public class RootController {
      * @param passwordEncoder The PasswordEncoder for hashing passwords.
      * @param chatGptApi      The ChatGptApi for communicating with the ChatGPT API.
      * @param sessionRepository The SessionRepository for accessing session data.
+     * @param passwordResetTokenRepository The PasswordResetTokenRepository for accessing password reset token data.
+     * @param emailService The EmailService for sending emails.
      */
     public RootController(UserRepository userRepository,
                           ChatService chatService,
                           PasswordEncoder passwordEncoder,
                           ChatGptApi chatGptApi,
-                          SessionRepository sessionRepository) {
+                          SessionRepository sessionRepository,
+                          PasswordResetTokenRepository passwordResetTokenRepository,
+                          EmailService emailService) {
         this.userRepository = userRepository;
         this.chatService = chatService;
         this.passwordEncoder = passwordEncoder;
         this.chatGptApi = chatGptApi;
         this.sessionRepository = sessionRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
+        this.emailService = emailService;
     }
 
     @GetMapping("/")
@@ -248,8 +259,25 @@ public class RootController {
             return badRequest().body("Please enter a valid email address.");
         }
 
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (!optionalUser.isPresent()) {
+            return badRequest().body("No account found with this email address.");
+        }
+
+        User user = optionalUser.get();
+
+        // Generate a password reset token
+        String token = UUID.randomUUID().toString();
+        PasswordResetToken passwordResetToken = new PasswordResetToken(user, token);
+        passwordResetTokenRepository.save(passwordResetToken);
+
+        // Send the email with the reset token
+        String resetLink = "http://localhost/reset-password?token=" + token;
+        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+
         return ok("Password reset email sent successfully.");
     }
+
 
     @PostMapping("/forgot-password/reset-password")
     public ResponseEntity<String> resetPassword(@RequestBody Map<String, String> passwords) {
