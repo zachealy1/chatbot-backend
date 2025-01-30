@@ -29,41 +29,20 @@ public class AccountController {
         this.passwordEncoder = passwordEncoder;
     }
 
+    /**
+     * Public User Registration: is_admin = false, can_login = false.
+     */
     @PostMapping("/register")
-    public ResponseEntity<String> register(@RequestBody Map<String, String> userDetails) {
-        // Extract user details
-        String username = userDetails.get("username");
-        String email = userDetails.get("email");
-        String password = userDetails.get("password");
-        String confirmPassword = userDetails.get("confirmPassword");
-        String dateOfBirthStr = userDetails.get("dateOfBirth");
+    public ResponseEntity<String> registerUser(@RequestBody Map<String, String> userDetails) {
+        return register(userDetails, false);
+    }
 
-        // Validate user input
-        String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
-        if (validationError != null) {
-            return badRequest().body(validationError);
-        }
-
-        // Parse date of birth
-        LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
-        if (dateOfBirth == null) {
-            return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
-        }
-
-        // Check if user already exists
-        String existenceError = checkUserExistence(username, email);
-        if (existenceError != null) {
-            return badRequest().body(existenceError);
-        }
-
-        // Hash the password
-        String hashedPassword = hashPassword(password);
-
-        // Create and save the new user
-        User newUser = createNewUser(username, email, hashedPassword, dateOfBirth);
-        userRepository.save(newUser);
-
-        return ok("User registered successfully.");
+    /**
+     * Admin Registration: is_admin = true, can_login = false.
+     */
+    @PostMapping("/register/admin")
+    public ResponseEntity<String> registerAdmin(@RequestBody Map<String, String> userDetails) {
+        return register(userDetails, true);
     }
 
     @PostMapping("/update")
@@ -121,6 +100,45 @@ public class AccountController {
         userRepository.save(user);
 
         return ok("Account updated successfully.");
+    }
+
+    /**
+     * Handles user registration logic for both public users and admins.
+     *
+     * @param userDetails The registration details.
+     * @param isAdmin     Whether the user is registering as an admin.
+     * @return ResponseEntity indicating success or failure.
+     */
+    private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
+        String username = userDetails.get("username");
+        String email = userDetails.get("email");
+        String password = userDetails.get("password");
+        String confirmPassword = userDetails.get("confirmPassword");
+        String dateOfBirthStr = userDetails.get("dateOfBirth");
+
+        String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
+        if (validationError != null) {
+            return badRequest().body(validationError);
+        }
+
+        LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
+        if (dateOfBirth == null) {
+            return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
+        }
+
+        String existenceError = checkUserExistence(username, email);
+        if (existenceError != null) {
+            return badRequest().body(existenceError);
+        }
+
+        // Hash password
+        String hashedPassword = passwordEncoder.encode(password);
+
+        // Create user with appropriate admin & login settings
+        User newUser = createNewUser(username, email, hashedPassword, dateOfBirth, isAdmin);
+        userRepository.save(newUser);
+
+        return ok(isAdmin ? "Admin registered successfully." : "User registered successfully.");
     }
 
     /**
@@ -205,20 +223,17 @@ public class AccountController {
     }
 
     /**
-     * Creates a new User entity.
-     *
-     * @param username       The desired username.
-     * @param email          The user's email address.
-     * @param hashedPassword The hashed password.
-     * @param dateOfBirth    The user's date of birth.
-     * @return A new User instance.
+     * Creates a new user entity.
      */
-    private User createNewUser(String username, String email, String hashedPassword, LocalDate dateOfBirth) {
+    private User createNewUser(String username, String email, String hashedPassword,
+                               LocalDate dateOfBirth, boolean isAdmin) {
         User newUser = new User();
         newUser.setUsername(username);
         newUser.setEmail(email);
         newUser.setPasswordHash(hashedPassword);
         newUser.setDateOfBirth(dateOfBirth);
+        newUser.setIsAdmin(isAdmin);
+        newUser.setCanLogin(false);
         return newUser;
     }
 

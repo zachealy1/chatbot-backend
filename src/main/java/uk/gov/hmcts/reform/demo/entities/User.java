@@ -8,15 +8,10 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
-/**
- * Entity representing a user in the system.
- */
 @Entity
 @Table(name = "users")
 public class User {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -33,20 +28,14 @@ public class User {
     @Column(nullable = false)
     private LocalDate dateOfBirth;
 
+    @Column(nullable = false)
+    private Boolean isAdmin = false; // New field
+
+    @Column(nullable = false)
+    private Boolean canLogin = false; // New field
+
     @Column(nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
-
-    // Constructors
-    public User() {
-
-    }
-
-    public User(String username, String email, String passwordHash, LocalDate dateOfBirth) {
-        this.username = username;
-        this.email = email;
-        this.passwordHash = passwordHash;
-        this.dateOfBirth = dateOfBirth;
-    }
+    private LocalDate createdAt = LocalDate.now();
 
     // Getters and Setters
     public Long getId() {
@@ -89,7 +78,19 @@ public class User {
         this.dateOfBirth = dateOfBirth;
     }
 
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
+    public Boolean getIsAdmin() {
+        return isAdmin;
+    }
+
+    public void setIsAdmin(Boolean isAdmin) {
+        this.isAdmin = isAdmin;
+    }
+
+    public Boolean getCanLogin() {
+        return canLogin;
+    }
+
+    public void setCanLogin(Boolean canLogin) {
+        this.canLogin = canLogin;
     }
 }

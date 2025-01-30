@@ -32,94 +32,78 @@ public class LoginController {
         this.sessionRepository = sessionRepository;
     }
 
-    /**
-     * Login endpoint to authenticate users and create a new session.
-     *
-     * @param credentials A LoginRequest object containing username and password.
-     * @return A success message with session token upon successful authentication.
-     */
     @PostMapping("/")
     public ResponseEntity<?> login(@RequestBody LoginRequest credentials) {
-        String username = credentials.getUsername();
-        String password = credentials.getPassword();
+        return authenticateUser(credentials, false);
+    }
 
-        if (username == null || password == null || username.trim().isEmpty() || password.trim().isEmpty()) {
-            return ResponseEntity.badRequest().body("Username and password are required.");
-        }
-
-        Optional<User> optionalUser = userRepository.findByUsername(username);
-        if (!optionalUser.isPresent()) {
-            return ResponseEntity.status(401).body("Invalid username or password.");
-        }
-
-        User user = optionalUser.get();
-
-        // Verify the password
-        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            return ResponseEntity.status(401).body("Invalid username or password.");
-        }
-
-        // Generate a unique session token
-        String sessionToken = UUID.randomUUID().toString();
-
-        // Define session duration (e.g., 24 hours)
-        LocalDateTime createdAt = LocalDateTime.now();
-        LocalDateTime expiresAt = createdAt.plusHours(24);
-
-        // Create and save the session
-        Session session = new Session(sessionToken, user, createdAt, expiresAt);
-        sessionRepository.save(session);
-
-        // Optionally, you can return additional session details
-        Map<String, String> response = Map.of(
-            "message", "User logged in successfully.",
-            "sessionToken", sessionToken
-                                             );
-
-        return ResponseEntity.ok(response);
+    @PostMapping("/admin")
+    public ResponseEntity<?> loginAdmin(@RequestBody LoginRequest credentials) {
+        return authenticateUser(credentials, true);
     }
 
     /**
-     * Login endpoint to authenticate users and create a new session.
+     * Authenticates a user or admin and creates a session if valid.
      *
-     * @param credentials A LoginRequest object containing username and password.
-     * @return A success message with session token upon successful authentication.
+     * @param credentials The login request containing username and password.
+     * @param isAdminLogin Set to true if admin login is required.
+     * @return Response entity with login success or error message.
      */
-    @PostMapping("/admin")
-    public ResponseEntity<?> loginAdmin(@RequestBody LoginRequest credentials) {
+    private ResponseEntity<?> authenticateUser(LoginRequest credentials, boolean isAdminLogin) {
         String username = credentials.getUsername();
         String password = credentials.getPassword();
 
-        if (username == null || password == null || username.trim().isEmpty() || password.trim().isEmpty()) {
+        if (!isValidCredentials(username, password)) {
             return ResponseEntity.badRequest().body("Username and password are required.");
         }
 
         Optional<User> optionalUser = userRepository.findByUsername(username);
-        if (!optionalUser.isPresent()) {
+        if (optionalUser.isEmpty()) {
             return ResponseEntity.status(401).body("Invalid username or password.");
         }
 
         User user = optionalUser.get();
 
-        // Verify the password
+        if (!isAuthorizedUser(user, isAdminLogin)) {
+            return ResponseEntity.status(403).body(isAdminLogin ? "Admin access denied." :
+                                                       "Your account is not allowed to "
+                                                           + "log in. Please contact support.");
+        }
+
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             return ResponseEntity.status(401).body("Invalid username or password.");
         }
 
-        // Generate a unique session token
-        String sessionToken = UUID.randomUUID().toString();
+        return createSession(user, isAdminLogin ? "Admin logged in successfully." : "User logged in successfully.");
+    }
 
-        // Define session duration (e.g., 24 hours)
+    /**
+     * Validates if username and password are non-null and non-empty.
+     */
+    private boolean isValidCredentials(String username, String password) {
+        return username != null && password != null && !username.trim().isEmpty() && !password.trim().isEmpty();
+    }
+
+    /**
+     * Checks if a user is authorized to log in based on `can_login` and `is_admin` fields.
+     */
+    private boolean isAuthorizedUser(User user, boolean isAdminLogin) {
+        return user.getCanLogin() && (!isAdminLogin || user.getIsAdmin());
+    }
+
+    /**
+     * Creates a session for the authenticated user.
+     */
+    private ResponseEntity<?> createSession(User user, String successMessage) {
+        String sessionToken = UUID.randomUUID().toString();
         LocalDateTime createdAt = LocalDateTime.now();
         LocalDateTime expiresAt = createdAt.plusHours(24);
 
-        // Create and save the session
         Session session = new Session(sessionToken, user, createdAt, expiresAt);
         sessionRepository.save(session);
 
-        // Optionally, you can return additional session details
         Map<String, String> response = Map.of(
-            "message", "User logged in successfully.",
+            "message", successMessage,
             "sessionToken", sessionToken
                                              );
 
