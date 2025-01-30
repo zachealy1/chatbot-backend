@@ -11,15 +11,19 @@ import org.springframework.web.bind.annotation.RestController;
 import uk.gov.hmcts.reform.demo.dto.LoginRequest;
 import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.Message;
+import uk.gov.hmcts.reform.demo.entities.Session;
 import uk.gov.hmcts.reform.demo.entities.User;
+import uk.gov.hmcts.reform.demo.repositories.SessionRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 import uk.gov.hmcts.reform.demo.services.ChatService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.springframework.http.ResponseEntity.badRequest;
 import static org.springframework.http.ResponseEntity.ok;
@@ -33,6 +37,7 @@ public class RootController {
     private final ChatService chatService;
     private final PasswordEncoder passwordEncoder;
     private final ChatGptApi chatGptApi;
+    private final SessionRepository sessionRepository;
 
     /**
      * Constructor for RootController.
@@ -41,15 +46,18 @@ public class RootController {
      * @param chatService     The ChatService for handling chat operations.
      * @param passwordEncoder The PasswordEncoder for hashing passwords.
      * @param chatGptApi      The ChatGptApi for communicating with the ChatGPT API.
+     * @param sessionRepository The SessionRepository for accessing session data.
      */
     public RootController(UserRepository userRepository,
                           ChatService chatService,
                           PasswordEncoder passwordEncoder,
-                          ChatGptApi chatGptApi) {
+                          ChatGptApi chatGptApi,
+                          SessionRepository sessionRepository) {
         this.userRepository = userRepository;
         this.chatService = chatService;
         this.passwordEncoder = passwordEncoder;
         this.chatGptApi = chatGptApi;
+        this.sessionRepository = sessionRepository;
     }
 
     @GetMapping("/")
@@ -179,8 +187,14 @@ public class RootController {
     }
 
 
+    /**
+     * Login endpoint to authenticate users and create a new session.
+     *
+     * @param credentials A LoginRequest object containing username and password.
+     * @return A success message with session token upon successful authentication.
+     */
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody LoginRequest credentials) {
+    public ResponseEntity<?> login(@RequestBody LoginRequest credentials) {
         String username = credentials.getUsername();
         String password = credentials.getPassword();
 
@@ -200,9 +214,24 @@ public class RootController {
             return ResponseEntity.status(401).body("Invalid username or password.");
         }
 
-        // (Optional) Generate JWT Token here and return it
+        // Generate a unique session token
+        String sessionToken = UUID.randomUUID().toString();
 
-        return ResponseEntity.ok("User logged in successfully.");
+        // Define session duration (e.g., 24 hours)
+        LocalDateTime createdAt = LocalDateTime.now();
+        LocalDateTime expiresAt = createdAt.plusHours(24);
+
+        // Create and save the session
+        Session session = new Session(sessionToken, user, createdAt, expiresAt);
+        sessionRepository.save(session);
+
+        // Optionally, you can return additional session details
+        Map<String, String> response = Map.of(
+            "message", "User logged in successfully.",
+            "sessionToken", sessionToken
+                                             );
+
+        return ResponseEntity.ok(response);
     }
 
 
