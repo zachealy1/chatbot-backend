@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import uk.gov.hmcts.reform.demo.dto.LoginRequest;
 import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.Message;
 import uk.gov.hmcts.reform.demo.entities.User;
@@ -179,16 +180,31 @@ public class RootController {
 
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody Map<String, String> credentials) {
-        String username = credentials.get("username");
-        String password = credentials.get("password");
+    public ResponseEntity<String> login(@RequestBody LoginRequest credentials) {
+        String username = credentials.getUsername();
+        String password = credentials.getPassword();
 
-        if (username == null || password == null) {
-            return badRequest().body("Username and password are required.");
+        if (username == null || password == null || username.trim().isEmpty() || password.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("Username and password are required.");
         }
 
-        return ok("User logged in successfully.");
+        Optional<User> optionalUser = userRepository.findByUsername(username);
+        if (!optionalUser.isPresent()) {
+            return ResponseEntity.status(401).body("Invalid username or password.");
+        }
+
+        User user = optionalUser.get();
+
+        // Verify the password
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            return ResponseEntity.status(401).body("Invalid username or password.");
+        }
+
+        // (Optional) Generate JWT Token here and return it
+
+        return ResponseEntity.ok("User logged in successfully.");
     }
+
 
     @PostMapping("/logout")
     public ResponseEntity<String> logout() {
