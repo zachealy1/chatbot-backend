@@ -392,7 +392,6 @@ public class RootController {
         user.setPasswordHash(hashedPassword);
         userRepository.save(user);
 
-        // ✅ Delete the OTP after successful password reset
         passwordResetTokenRepository.delete(resetToken);
 
         return ok("Password reset successfully.");
@@ -400,19 +399,60 @@ public class RootController {
 
     @PostMapping("/account/update")
     public ResponseEntity<String> updateAccount(@RequestBody Map<String, String> userDetails) {
-        String username = userDetails.get("username");
         String email = userDetails.get("email");
+        String username = userDetails.get("username");
+        String dateOfBirthStr = userDetails.get("dateOfBirth");
 
-        if (username == null || username.trim().isEmpty()) {
-            return badRequest().body("Username is required.");
+        // Validate user input
+        ResponseEntity<String> validationResponse = validateUserDetails(email, username, dateOfBirthStr);
+        if (validationResponse != null) {
+            return validationResponse;
         }
 
-        if (email == null || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            return badRequest().body("Enter a valid email address.");
+        // Find user by email
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (!optionalUser.isPresent()) {
+            return badRequest().body("No account found with this email address.");
         }
+
+        User user = optionalUser.get();
+
+        // Ensure username is unique
+        ResponseEntity<String> usernameValidationResponse = validateUniqueUsername(username, user);
+        if (usernameValidationResponse != null) {
+            return usernameValidationResponse;
+        }
+
+        // Update user details
+        user.setUsername(username);
+        user.setEmail(email);
+
+        // Update date of birth if provided
+        if (dateOfBirthStr != null && !dateOfBirthStr.trim().isEmpty()) {
+            ResponseEntity<String> dobValidationResponse = validateAndUpdateDateOfBirth(dateOfBirthStr, user);
+            if (dobValidationResponse != null) {
+                return dobValidationResponse;
+            }
+        }
+
+        // Update password if provided
+        if (userDetails.containsKey("password") && userDetails.containsKey("confirmPassword")) {
+            final String password = userDetails.get("password");
+            final String confirmPassword = userDetails.get("confirmPassword");
+
+            ResponseEntity<String> passwordValidationResponse = validateAndUpdatePassword(password, confirmPassword, user);
+            if (passwordValidationResponse != null) {
+                return passwordValidationResponse;
+            }
+        }
+
+        // Save updated user details
+        userRepository.save(user);
 
         return ok("Account updated successfully.");
     }
+
+
 
     /**
      * Validates the user input for registration.
@@ -556,5 +596,72 @@ public class RootController {
         SecureRandom random = new SecureRandom();
         int otp = 100000 + random.nextInt(900000); // Generates a 6-digit OTP
         return String.valueOf(otp);
+    }
+
+    /**
+     * Validates the email and username fields.
+     */
+    private ResponseEntity<String> validateUserDetails(String email, String username, String dateOfBirthStr) {
+        if (email == null || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return badRequest().body("Enter a valid email address.");
+        }
+
+        if (username == null || username.trim().isEmpty()) {
+            return badRequest().body("Username is required.");
+        }
+
+        if (dateOfBirthStr != null && !dateOfBirthStr.trim().isEmpty()) {
+            if (parseDateOfBirth(dateOfBirthStr) == null) {
+                return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
+            }
+        }
+
+        return null; // ✅ Validation passed
+    }
+
+
+    /**
+     * Ensures that the new username is unique.
+     */
+    private ResponseEntity<String> validateUniqueUsername(String username, User currentUser) {
+        Optional<User> existingUser = userRepository.findByUsername(username);
+        if (existingUser.isPresent() && !existingUser.get().getId().equals(currentUser.getId())) {
+            return badRequest().body("Username is already taken. Please choose another one.");
+        }
+
+        return null;
+    }
+
+    /**
+     * Validates and updates the password if provided.
+     */
+    private ResponseEntity<String> validateAndUpdatePassword(String password, String confirmPassword, User user) {
+        if (password != null && confirmPassword != null) {
+            if (!password.equals(confirmPassword)) {
+                return badRequest().body("Passwords do not match.");
+            }
+
+            if (!password.matches("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&])[A-Za-z\\d@$!%*?&]{8,}$")) {
+                return badRequest().body(
+                    "Password must be at least 8 characters long and include an uppercase letter, "
+                        + "a lowercase letter, a number, and a special character."
+                                        );
+            }
+
+            // Hash and update the password
+            user.setPasswordHash(passwordEncoder.encode(password));
+        }
+
+        return null;
+    }
+
+    private ResponseEntity<String> validateAndUpdateDateOfBirth(String dateOfBirthStr, User user) {
+        LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
+        if (dateOfBirth == null) {
+            return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
+        }
+
+        user.setDateOfBirth(dateOfBirth);
+        return null;
     }
 }
