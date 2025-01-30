@@ -21,6 +21,7 @@ import uk.gov.hmcts.reform.demo.services.ChatService;
 import uk.gov.hmcts.reform.demo.services.EmailService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
@@ -251,6 +252,9 @@ public class RootController {
         return ok("User logged out successfully.");
     }
 
+    /**
+     * Request OTP for password reset.
+     */
     @PostMapping("/forgot-password/enter-email")
     public ResponseEntity<String> enterEmail(@RequestBody Map<String, String> body) {
         String email = body.get("email");
@@ -265,17 +269,72 @@ public class RootController {
         }
 
         User user = optionalUser.get();
+        sendOtpToUser(user);
 
-        // Generate a password reset token
-        String token = UUID.randomUUID().toString();
-        PasswordResetToken passwordResetToken = new PasswordResetToken(user, token);
-        passwordResetTokenRepository.save(passwordResetToken);
+        return ok("A one-time password (OTP) has been sent to your email. The OTP is valid for 10 minutes.");
+    }
 
-        // Send the email with the reset token
-        String resetLink = "http://localhost/reset-password?token=" + token;
-        emailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+    /**
+     * Resend OTP for password reset.
+     */
+    @PostMapping("/forgot-password/resend-otp")
+    public ResponseEntity<String> resendOtp(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
 
-        return ok("Password reset email sent successfully.");
+        if (email == null || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return badRequest().body("Please enter a valid email address.");
+        }
+
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (!optionalUser.isPresent()) {
+            return badRequest().body("No account found with this email address.");
+        }
+
+        User user = optionalUser.get();
+        sendOtpToUser(user);
+
+        return ok("A one-time password (OTP) has been sent to your email. The OTP is valid for 10 minutes.");
+    }
+
+
+    @PostMapping("/forgot-password/verify-otp")
+    public ResponseEntity<String> verifyOtp(@RequestBody Map<String, String> body) {
+        String email = body.get("email");
+        String otp = body.get("otp");
+
+        if (email == null || otp == null) {
+            return badRequest().body("Email and OTP are required.");
+        }
+
+        Optional<User> optionalUser = userRepository.findByEmail(email);
+        if (!optionalUser.isPresent()) {
+            return badRequest().body("No account found with this email address.");
+        }
+
+        User user = optionalUser.get();
+
+        // Retrieve the OTP from the database
+        Optional<PasswordResetToken> optionalResetToken = passwordResetTokenRepository.findByUser(user);
+        if (!optionalResetToken.isPresent()) {
+            return badRequest().body("No OTP request found. Please request a password reset first.");
+        }
+
+        PasswordResetToken resetToken = optionalResetToken.get();
+
+        // Check if the OTP is expired
+        if (resetToken.isExpired()) {
+            return badRequest().body("The OTP has expired. Please request a new one.");
+        }
+
+        // ✅ Use passwordEncoder.matches() to compare hashed OTP
+        if (!passwordEncoder.matches(otp, resetToken.getToken())) {
+            return badRequest().body("The one-time password is incorrect. Please try again.");
+        }
+
+        // If OTP is verified, remove it from the database (optional)
+        passwordResetTokenRepository.delete(resetToken);
+
+        return ok("OTP verified successfully.");
     }
 
 
@@ -296,23 +355,6 @@ public class RootController {
         }
 
         return ok("Password reset successfully.");
-    }
-
-    @PostMapping("/forgot-password/resend-otp")
-    public ResponseEntity<String> resendOtp() {
-        return ok("OTP has been resent successfully.");
-    }
-
-    @PostMapping("/forgot-password/verify-otp")
-    public ResponseEntity<String> verifyOtp(@RequestBody Map<String, String> body) {
-        String otp = body.get("otp");
-        String expectedOtp = "123456"; // Replace with real logic
-
-        if (otp == null || !otp.equals(expectedOtp)) {
-            return badRequest().body("The one-time password is incorrect. Please try again.");
-        }
-
-        return ok("OTP verified successfully.");
     }
 
     @PostMapping("/account/update")
@@ -438,5 +480,41 @@ public class RootController {
      */
     private String hashPassword(String password) {
         return passwordEncoder.encode(password);
+    }
+
+    /**
+     * Helper method to generate an OTP, store it in the database, and send an email.
+     */
+    private void sendOtpToUser(User user) {
+        String rawOtp = generateOtp();
+        String hashedOtp = passwordEncoder.encode(rawOtp);
+
+        Optional<PasswordResetToken> existingToken = passwordResetTokenRepository.findByUser(user);
+        PasswordResetToken resetToken;
+
+        if (existingToken.isPresent()) {
+            resetToken = existingToken.get();
+            resetToken.setToken(hashedOtp);
+            resetToken.setExpiryDate(LocalDateTime.now().plusMinutes(10));
+            logger.info("Updating existing OTP for user: {}", user.getEmail());
+        } else {
+            resetToken = new PasswordResetToken(user, hashedOtp);
+            logger.info("Creating new OTP for user: {}", user.getEmail());
+        }
+
+        passwordResetTokenRepository.save(resetToken);
+        logger.info("OTP saved successfully in the database for user: {}", user.getEmail());
+
+        emailService.sendPasswordResetEmail(user.getEmail(), rawOtp);
+    }
+
+
+    /**
+     * Generates a 6-digit OTP.
+     */
+    private String generateOtp() {
+        SecureRandom random = new SecureRandom();
+        int otp = 100000 + random.nextInt(900000); // Generates a 6-digit OTP
+        return String.valueOf(otp);
     }
 }

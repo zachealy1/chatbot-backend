@@ -17,12 +17,12 @@ public class EmailService {
         this.mailSender = mailSender;
     }
 
-    public void sendPasswordResetEmail(String toEmail, String resetLink) {
+    public void sendPasswordResetEmail(String toEmail, String otp) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
         message.setTo(toEmail);
         message.setSubject("Password Reset Request");
-        message.setText("Click the link below to reset your password:\n\n" + resetLink);
+        message.setText("Here is your one time password, use this to reset your password:\n\n" + otp);
 
         mailSender.send(message);
     }
