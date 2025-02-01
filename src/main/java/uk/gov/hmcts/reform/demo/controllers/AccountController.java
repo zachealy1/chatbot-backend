@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.AccountRequestRepository;
@@ -16,6 +17,7 @@ import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -60,6 +62,7 @@ public class AccountController {
         }
 
         request.setApprovedAt(LocalDateTime.now());
+        request.setStatus(AccountRequest.Status.APPROVED);
 
         User user = request.getUser();
         user.setCanLogin(true); // Allow the user to log in
@@ -86,6 +89,14 @@ public class AccountController {
         return ResponseEntity.ok("Account request rejected, and user has been deleted.");
     }
 
+    /**
+     * Retrieves all pending account requests.
+     */
+    @GetMapping("/pending")
+    public ResponseEntity<List<AccountRequest>> getPendingAccountRequests() {
+        List<AccountRequest> pendingRequests = accountRequestRepository.findByStatus(AccountRequest.Status.PENDING);
+        return ResponseEntity.ok(pendingRequests);
+    }
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         String username = userDetails.get("username");

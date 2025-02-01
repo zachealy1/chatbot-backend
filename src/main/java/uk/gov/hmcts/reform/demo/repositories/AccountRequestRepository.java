@@ -5,9 +5,12 @@ import org.springframework.stereotype.Repository;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface AccountRequestRepository extends JpaRepository<AccountRequest, Long> {
     Optional<AccountRequest> findByUser(User user);
+
+    List<AccountRequest> findByStatus(AccountRequest.Status status);
 }
