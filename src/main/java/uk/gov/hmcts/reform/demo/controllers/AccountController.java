@@ -6,7 +6,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
+import uk.gov.hmcts.reform.demo.repositories.AccountRequestRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 
 import java.time.LocalDate;
@@ -23,92 +25,25 @@ public class AccountController {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AccountRequestRepository accountRequestRepository;
 
-    public AccountController(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+    public AccountController(UserRepository userRepository, PasswordEncoder passwordEncoder,
+                             AccountRequestRepository accountRequestRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.accountRequestRepository = accountRequestRepository;
     }
 
-    /**
-     * Public User Registration: is_admin = false, can_login = false.
-     */
     @PostMapping("/register")
     public ResponseEntity<String> registerUser(@RequestBody Map<String, String> userDetails) {
         return register(userDetails, false);
     }
 
-    /**
-     * Admin Registration: is_admin = true, can_login = false.
-     */
     @PostMapping("/register/admin")
     public ResponseEntity<String> registerAdmin(@RequestBody Map<String, String> userDetails) {
         return register(userDetails, true);
     }
 
-    @PostMapping("/update")
-    public ResponseEntity<String> updateAccount(@RequestBody Map<String, String> userDetails) {
-        String email = userDetails.get("email");
-        String username = userDetails.get("username");
-        String dateOfBirthStr = userDetails.get("dateOfBirth");
-
-        // Validate user input
-        ResponseEntity<String> validationResponse = validateUserDetails(email, username, dateOfBirthStr);
-        if (validationResponse != null) {
-            return validationResponse;
-        }
-
-        // Find user by email
-        Optional<User> optionalUser = userRepository.findByEmail(email);
-        if (!optionalUser.isPresent()) {
-            return badRequest().body("No account found with this email address.");
-        }
-
-        User user = optionalUser.get();
-
-        // Ensure username is unique
-        ResponseEntity<String> usernameValidationResponse = validateUniqueUsername(username, user);
-        if (usernameValidationResponse != null) {
-            return usernameValidationResponse;
-        }
-
-        // Update user details
-        user.setUsername(username);
-        user.setEmail(email);
-
-        // Update date of birth if provided
-        if (dateOfBirthStr != null && !dateOfBirthStr.trim().isEmpty()) {
-            ResponseEntity<String> dobValidationResponse = validateAndUpdateDateOfBirth(dateOfBirthStr, user);
-            if (dobValidationResponse != null) {
-                return dobValidationResponse;
-            }
-        }
-
-        // Update password if provided
-        if (userDetails.containsKey("password") && userDetails.containsKey("confirmPassword")) {
-            final String password = userDetails.get("password");
-            final String confirmPassword = userDetails.get("confirmPassword");
-
-            ResponseEntity<String> passwordValidationResponse = validateAndUpdatePassword(password,
-                                                                                          confirmPassword,
-                                                                                          user);
-            if (passwordValidationResponse != null) {
-                return passwordValidationResponse;
-            }
-        }
-
-        // Save updated user details
-        userRepository.save(user);
-
-        return ok("Account updated successfully.");
-    }
-
-    /**
-     * Handles user registration logic for both public users and admins.
-     *
-     * @param userDetails The registration details.
-     * @param isAdmin     Whether the user is registering as an admin.
-     * @return ResponseEntity indicating success or failure.
-     */
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         String username = userDetails.get("username");
         String email = userDetails.get("email");
@@ -116,6 +51,7 @@ public class AccountController {
         String confirmPassword = userDetails.get("confirmPassword");
         String dateOfBirthStr = userDetails.get("dateOfBirth");
 
+        // Validate user input
         String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
         if (validationError != null) {
             return badRequest().body(validationError);
@@ -126,6 +62,7 @@ public class AccountController {
             return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
         }
 
+        // Check if user exists
         String existenceError = checkUserExistence(username, email);
         if (existenceError != null) {
             return badRequest().body(existenceError);
@@ -134,11 +71,24 @@ public class AccountController {
         // Hash password
         String hashedPassword = passwordEncoder.encode(password);
 
-        // Create user with appropriate admin & login settings
+        // Create user with appropriate settings
         User newUser = createNewUser(username, email, hashedPassword, dateOfBirth, isAdmin);
         userRepository.save(newUser);
 
-        return ok(isAdmin ? "Admin registered successfully." : "User registered successfully.");
+        // Log an entry in account_requests table
+        logAccountRequest(newUser);
+
+        return ok(isAdmin ? "Admin registered successfully. Awaiting approval." : "User registered successfully.");
+    }
+
+    /**
+     * Logs an account request for the newly registered user.
+     *
+     * @param user The registered user.
+     */
+    private void logAccountRequest(User user) {
+        AccountRequest accountRequest = new AccountRequest(user);
+        accountRequestRepository.save(accountRequest);
     }
 
     /**

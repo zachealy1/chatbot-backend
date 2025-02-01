@@ -45,3 +45,12 @@ CREATE TABLE messages (
                         message TEXT NOT NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create the account_requests table
+CREATE TABLE account_requests (
+                                id SERIAL PRIMARY KEY,
+                                user_id INT REFERENCES users(id) ON DELETE CASCADE,
+                                approved BOOLEAN DEFAULT FALSE,
+                                requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                                approved_at TIMESTAMP DEFAULT NULL
+);
