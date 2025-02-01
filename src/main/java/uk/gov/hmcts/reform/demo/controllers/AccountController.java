@@ -2,7 +2,9 @@ package uk.gov.hmcts.reform.demo.controllers;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -12,6 +14,7 @@ import uk.gov.hmcts.reform.demo.repositories.AccountRequestRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeParseException;
 import java.util.Map;
 import java.util.Optional;
@@ -44,6 +47,46 @@ public class AccountController {
         return register(userDetails, true);
     }
 
+    @PostMapping("/approve/{requestId}")
+    public ResponseEntity<String> approveAccountRequest(@PathVariable Long requestId) {
+        Optional<AccountRequest> optionalRequest = accountRequestRepository.findById(requestId);
+        if (!optionalRequest.isPresent()) {
+            return badRequest().body("Account request not found.");
+        }
+
+        AccountRequest request = optionalRequest.get();
+        if (request.isApproved()) {
+            return badRequest().body("Account request is already approved.");
+        }
+
+        request.setApprovedAt(LocalDateTime.now());
+
+        User user = request.getUser();
+        user.setCanLogin(true); // Allow the user to log in
+        userRepository.save(user);
+
+        request.setApproved(true);
+        accountRequestRepository.save(request);
+
+        return ok("Account request approved successfully.");
+    }
+
+    @Transactional
+    @PostMapping("/reject/{requestId}")
+    public ResponseEntity<String> rejectAccountRequest(@PathVariable Long requestId) {
+        AccountRequest request = accountRequestRepository.findById(requestId)
+            .orElseThrow(() -> new RuntimeException("Account request not found."));
+
+        User user = request.getUser();
+
+        // Ensure both deletions happen in the same transaction
+        accountRequestRepository.delete(request);
+        userRepository.delete(user);
+
+        return ResponseEntity.ok("Account request rejected, and user has been deleted.");
+    }
+
+
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         String username = userDetails.get("username");
         String email = userDetails.get("email");
@@ -51,7 +94,6 @@ public class AccountController {
         String confirmPassword = userDetails.get("confirmPassword");
         String dateOfBirthStr = userDetails.get("dateOfBirth");
 
-        // Validate user input
         String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
         if (validationError != null) {
             return badRequest().body(validationError);
@@ -62,23 +104,22 @@ public class AccountController {
             return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
         }
 
-        // Check if user exists
         String existenceError = checkUserExistence(username, email);
         if (existenceError != null) {
             return badRequest().body(existenceError);
         }
 
-        // Hash password
-        String hashedPassword = passwordEncoder.encode(password);
+        // ✅ Save the User First
+        User newUser = createNewUser(username, email, passwordEncoder.encode(password), dateOfBirth, isAdmin);
+        newUser = userRepository.save(newUser); // 🔹 Save User to Database First
 
-        // Create user with appropriate settings
-        User newUser = createNewUser(username, email, hashedPassword, dateOfBirth, isAdmin);
-        userRepository.save(newUser);
+        // ✅ Now Save AccountRequest (User Exists)
+        AccountRequest accountRequest = new AccountRequest();
+        accountRequest.setUser(newUser);
+        accountRequest.setStatus(AccountRequest.Status.PENDING);
+        accountRequestRepository.save(accountRequest);
 
-        // Log an entry in account_requests table
-        logAccountRequest(newUser);
-
-        return ok(isAdmin ? "Admin registered successfully. Awaiting approval." : "User registered successfully.");
+        return ok(isAdmin ? "Admin registered successfully." : "User registered successfully.");
     }
 
     /**

@@ -52,5 +52,6 @@ CREATE TABLE account_requests (
                                 user_id INT REFERENCES users(id) ON DELETE CASCADE,
                                 approved BOOLEAN DEFAULT FALSE,
                                 requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
-                                approved_at TIMESTAMP DEFAULT NULL
+                                approved_at TIMESTAMP DEFAULT NULL,
+                                status VARCHAR(50) DEFAULT 'PENDING'
 );

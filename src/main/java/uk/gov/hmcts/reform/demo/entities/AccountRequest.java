@@ -2,12 +2,16 @@ package uk.gov.hmcts.reform.demo.entities;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 
 import java.time.LocalDateTime;
 
@@ -21,25 +25,51 @@ public class AccountRequest {
 
     @OneToOne
     @JoinColumn(name = "user_id", referencedColumnName = "id", nullable = false)
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private User user;
 
     @Column(nullable = false)
     private boolean approved = false; // Default false until admin approves
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime requestedAt = LocalDateTime.now(); // Timestamp when request is made
+    private final LocalDateTime requestedAt = LocalDateTime.now(); // Timestamp when request is made
 
     @Column
     private LocalDateTime approvedAt; // Null until request is approved
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private Status status = Status.PENDING;
+
+    public enum Status {
+        PENDING, APPROVED, REJECTED
+    }
 
     public AccountRequest() {
     }
 
     public AccountRequest(User user) {
         this.user = user;
+        this.status = Status.PENDING;
     }
 
-    // Getters and setters
+    public void approveRequest() {
+        this.approved = true;
+        this.status = Status.APPROVED;
+        this.approvedAt = LocalDateTime.now();
+    }
+
+    public void rejectRequest() {
+        this.approved = false;
+        this.status = Status.REJECTED;
+        this.approvedAt = null;
+    }
+
+    public boolean isPending() {
+        return this.status == Status.PENDING;
+    }
+
+    // Getters and Setters
     public Long getId() {
         return id;
     }
@@ -58,7 +88,6 @@ public class AccountRequest {
 
     public void setApproved(boolean approved) {
         this.approved = approved;
-        this.approvedAt = approved ? LocalDateTime.now() : null;
     }
 
     public LocalDateTime getRequestedAt() {
@@ -67,5 +96,17 @@ public class AccountRequest {
 
     public LocalDateTime getApprovedAt() {
         return approvedAt;
+    }
+
+    public void setApprovedAt(LocalDateTime approvedAt) {
+        this.approvedAt = approvedAt;
+    }
+
+    public Status getStatus() {
+        return status;
+    }
+
+    public void setStatus(Status status) {
+        this.status = status;
     }
 }

@@ -32,7 +32,7 @@ public class LoginController {
         this.sessionRepository = sessionRepository;
     }
 
-    @PostMapping("/")
+    @PostMapping("/chat")
     public ResponseEntity<?> login(@RequestBody LoginRequest credentials) {
         return authenticateUser(credentials, false);
     }
