@@ -55,3 +55,32 @@ CREATE TABLE account_requests (
                                 approved_at TIMESTAMP DEFAULT NULL,
                                 status VARCHAR(50) DEFAULT 'PENDING'
 );
+
+CREATE TABLE support_banners (
+                               id SERIAL PRIMARY KEY,
+                               title VARCHAR(255) NOT NULL,
+                               content TEXT NOT NULL,
+                               created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                               updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create trigger function
+CREATE OR REPLACE FUNCTION update_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach trigger to support_banners table
+CREATE TRIGGER set_timestamp
+  BEFORE UPDATE ON support_banners
+  FOR EACH ROW
+  EXECUTE FUNCTION update_timestamp();
+
+INSERT INTO support_banners (title, content)
+VALUES (
+         'Contact Support Team',
+         'If you need assistance, please call us at <strong>0800 123 456</strong> or email <a href="mailto:support@example.com">support@example.com</a>.'
+       );
