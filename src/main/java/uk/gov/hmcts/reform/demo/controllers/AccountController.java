@@ -1,5 +1,6 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
@@ -96,6 +97,28 @@ public class AccountController {
     public ResponseEntity<List<AccountRequest>> getPendingAccountRequests() {
         List<AccountRequest> pendingRequests = accountRequestRepository.findByStatus(AccountRequest.Status.PENDING);
         return ResponseEntity.ok(pendingRequests);
+    }
+
+    /**
+     * Deletes a user account by ID.
+     */
+    @DeleteMapping("/{userId}")
+    public ResponseEntity<String> deleteAccount(@PathVariable Long userId) {
+        Optional<User> optionalUser = userRepository.findById(userId);
+        if (!optionalUser.isPresent()) {
+            return ResponseEntity.badRequest().body("User not found.");
+        }
+
+        User user = optionalUser.get();
+
+        // Remove any associated account requests first
+        Optional<AccountRequest> optionalRequest = accountRequestRepository.findByUser(user);
+        optionalRequest.ifPresent(accountRequestRepository::delete);
+
+        // Delete the user account
+        userRepository.delete(user);
+
+        return ResponseEntity.ok("User account deleted successfully.");
     }
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
