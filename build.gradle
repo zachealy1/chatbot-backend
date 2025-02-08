@@ -177,8 +177,10 @@ dependencies {
   // PostgreSQL JDBC Driver
   implementation group: 'org.postgresql', name: 'postgresql', version: '42.6.0'
 
-  // Security (BCrypt Password Encoder)
-  implementation group: 'org.springframework.security', name: 'spring-security-crypto', version: '6.2.1' // Added for password hashing
+  // Security
+  implementation group: 'org.springframework.security', name: 'spring-security-core'
+  implementation group: 'org.springframework.security', name: 'spring-security-config'
+  implementation group: 'org.springframework.security', name: 'spring-security-web'
 
   // JUnit for Testing
   testImplementation(platform('org.junit:junit-bom:5.11.4'))

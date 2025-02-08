@@ -1,5 +1,6 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -21,6 +22,7 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import uk.gov.hmcts.reform.demo.security.AccountUserDetails;
 
 import static org.springframework.http.ResponseEntity.badRequest;
 import static org.springframework.http.ResponseEntity.ok;
@@ -120,6 +122,63 @@ public class AccountController {
 
         return ResponseEntity.ok("User account deleted successfully.");
     }
+
+    @PostMapping("/update")
+    public ResponseEntity<String> updateUser(
+        @AuthenticationPrincipal AccountUserDetails currentUserDetails,
+        @RequestBody Map<String, String> userDetailsMap) {
+
+        // Use the authenticated user's ID to look up the user in the database.
+        Optional<User> optionalUser = userRepository.findById(currentUserDetails.getId());
+        if (!optionalUser.isPresent()) {
+            return ResponseEntity.badRequest().body("User not found.");
+        }
+
+        User user = optionalUser.get();
+
+        // Extract new values from the payload
+        String newUsername = userDetailsMap.get("username");
+        String newEmail = userDetailsMap.get("email");
+        String dateOfBirthStr = userDetailsMap.get("dateOfBirth");
+
+        // Validate basic details (you can reuse your validateUserDetails method or similar)
+        ResponseEntity<String> detailsValidation = validateUserDetails(newEmail, newUsername, dateOfBirthStr);
+        if (detailsValidation != null) {
+            return detailsValidation;
+        }
+
+        // Validate that the new username is unique (if it has changed)
+        ResponseEntity<String> uniqueValidation = validateUniqueUsername(newUsername, user);
+        if (uniqueValidation != null) {
+            return uniqueValidation;
+        }
+
+        // Update username and email
+        user.setUsername(newUsername);
+        user.setEmail(newEmail);
+
+        // Update date of birth
+        ResponseEntity<String> dobValidation = validateAndUpdateDateOfBirth(dateOfBirthStr, user);
+        if (dobValidation != null) {
+            return dobValidation;
+        }
+
+        String password = userDetailsMap.get("password");
+        String confirmPassword = userDetailsMap.get("confirmPassword");
+
+        // Validate and update the password only if a new one is provided.
+        if (password != null && !password.trim().isEmpty()) {
+            ResponseEntity<String> passwordValidation = validateAndUpdatePassword(password, confirmPassword, user);
+            if (passwordValidation != null) {
+                return passwordValidation;
+            }
+        }
+
+        // Save updated user information
+        userRepository.save(user);
+        return ResponseEntity.ok("Account updated successfully.");
+    }
+
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         String username = userDetails.get("username");
