@@ -14,6 +14,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import uk.gov.hmcts.reform.demo.services.AccountUserDetailsService;
 
 @Configuration
@@ -30,13 +31,13 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-            // Ignore CSRF for registration and login endpoints
+            // Use a CSRF token repository that stores the token in a cookie.
             .csrf(csrf -> csrf
-                .ignoringRequestMatchers("/account/register", "/login/chat")
+                .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
             )
-            // Configure authorization rules
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers(
+                    "/csrf",
                     "/v3/api-docs/**",
                     "/swagger-ui/**",
                     "/swagger-ui.html",
@@ -48,9 +49,7 @@ public class SecurityConfig {
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED))
             )
-            // Enable form login with default settings
             .formLogin(Customizer.withDefaults())
-            // Enable logout with default settings
             .logout(Customizer.withDefaults());
 
         return http.build();

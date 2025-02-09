@@ -1,5 +1,7 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
@@ -30,6 +32,8 @@ import static org.springframework.http.ResponseEntity.ok;
 @RestController
 @RequestMapping("/account")
 public class AccountController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AccountController.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -128,54 +132,72 @@ public class AccountController {
         @AuthenticationPrincipal AccountUserDetails currentUserDetails,
         @RequestBody Map<String, String> userDetailsMap) {
 
-        // Use the authenticated user's ID to look up the user in the database.
+        logger.info("UpdateUser called for user with id: {}", currentUserDetails.getId());
+
+        // Look up the user by the authenticated user's ID
         Optional<User> optionalUser = userRepository.findById(currentUserDetails.getId());
         if (!optionalUser.isPresent()) {
+            logger.error("User with id {} not found in database", currentUserDetails.getId());
             return ResponseEntity.badRequest().body("User not found.");
         }
-
         User user = optionalUser.get();
+        logger.info("User found: {}", user);
 
         // Extract new values from the payload
         String newUsername = userDetailsMap.get("username");
         String newEmail = userDetailsMap.get("email");
         String dateOfBirthStr = userDetailsMap.get("dateOfBirth");
+        logger.info("Received update request with newUsername: '{}', newEmail: '{}', dateOfBirth: '{}'",
+                    newUsername, newEmail, dateOfBirthStr);
 
-        // Validate basic details (you can reuse your validateUserDetails method or similar)
+        // Validate basic details
         ResponseEntity<String> detailsValidation = validateUserDetails(newEmail, newUsername, dateOfBirthStr);
         if (detailsValidation != null) {
+            logger.error("Validation error for user details: {}", detailsValidation.getBody());
             return detailsValidation;
         }
+        logger.info("Basic details validated successfully.");
 
-        // Validate that the new username is unique (if it has changed)
+        // Validate uniqueness of the new username if it has changed
         ResponseEntity<String> uniqueValidation = validateUniqueUsername(newUsername, user);
         if (uniqueValidation != null) {
+            logger.error("Username uniqueness validation failed: {}", uniqueValidation.getBody());
             return uniqueValidation;
         }
+        logger.info("Username uniqueness validated successfully.");
 
         // Update username and email
         user.setUsername(newUsername);
         user.setEmail(newEmail);
+        logger.info("Updated user's username and email to: '{}' and '{}'", newUsername, newEmail);
 
-        // Update date of birth
+        // Validate and update the date of birth
         ResponseEntity<String> dobValidation = validateAndUpdateDateOfBirth(dateOfBirthStr, user);
         if (dobValidation != null) {
+            logger.error("Date of birth validation/update failed: {}", dobValidation.getBody());
             return dobValidation;
         }
+        logger.info("Date of birth validated and updated successfully.");
 
+        // Check and update password if provided
         String password = userDetailsMap.get("password");
         String confirmPassword = userDetailsMap.get("confirmPassword");
-
-        // Validate and update the password only if a new one is provided.
         if (password != null && !password.trim().isEmpty()) {
+            logger.info("New password provided, validating password update.");
             ResponseEntity<String> passwordValidation = validateAndUpdatePassword(password, confirmPassword, user);
             if (passwordValidation != null) {
+                logger.error("Password validation/update failed: {}", passwordValidation.getBody());
                 return passwordValidation;
             }
+            logger.info("Password validated and updated successfully.");
+        } else {
+            logger.info("No new password provided; skipping password update.");
         }
 
-        // Save updated user information
+        // Save the updated user
         userRepository.save(user);
+        logger.info("User information saved successfully for user id: {}", user.getId());
+
         return ResponseEntity.ok("Account updated successfully.");
     }
 
