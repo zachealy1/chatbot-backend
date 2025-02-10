@@ -41,7 +41,8 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/login/chat",
-                    "/account/register"
+                    "/account/register",
+                    "/forgot-password/enter-email"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
