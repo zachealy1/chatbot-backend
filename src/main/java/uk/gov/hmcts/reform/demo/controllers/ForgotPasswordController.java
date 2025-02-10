@@ -88,7 +88,6 @@ public class ForgotPasswordController {
         return ok("A one-time password (OTP) has been sent to your email. The OTP is valid for 10 minutes.");
     }
 
-
     @PostMapping("/verify-otp")
     public ResponseEntity<String> verifyOtp(@RequestBody Map<String, String> body) {
         String email = body.get("email");
@@ -174,7 +173,6 @@ public class ForgotPasswordController {
             return badRequest().body("The OTP has expired. Please request a new one.");
         }
 
-        // ✅ Ensure the OTP was verified before resetting the password
         if (!resetToken.isUsed()) {
             return badRequest().body("OTP verification required before resetting the password.");
         }
