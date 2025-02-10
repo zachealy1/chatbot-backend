@@ -42,7 +42,10 @@ public class SecurityConfig {
                     "/swagger-ui.html",
                     "/login/chat",
                     "/account/register",
-                    "/forgot-password/enter-email"
+                    "/forgot-password/enter-email",
+                    "/forgot-password/verify-otp",
+                    "/forgot-password/reset-password",
+                    "/forgot-password/resend-otp"
                 ).permitAll()
                 .anyRequest().authenticated()
             )
