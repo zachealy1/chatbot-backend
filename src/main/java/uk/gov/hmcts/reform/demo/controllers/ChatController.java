@@ -39,13 +39,6 @@ public class ChatController {
         this.chatService = chatService;
     }
 
-    /**
-     * Chat endpoint to handle user queries and return chatbot responses.
-     *
-     * @param currentUser The currently authenticated user injected by Spring Security.
-     * @param userInput   A map containing the user's input message and optional chatId.
-     * @return Chatbot response along with chatId.
-     */
     @PostMapping
     public ResponseEntity<Map<String, Object>> chat(
         @AuthenticationPrincipal User currentUser,
@@ -64,18 +57,42 @@ public class ChatController {
 
         logger.info("User sent message: {}", message);
 
-        User user = currentUser;
-
         String chatIdStr = userInput.get("chatId");
         Long chatId = parseChatId(chatIdStr);
-        Chat chat = getOrCreateChat(user, chatId, message);
-        chatId = chat.getId();
 
+        Chat chat;
+
+        // If no chatId, create a brand-new chat
+        if (chatId == null) {
+            logger.info("No chatId provided; creating new chat.");
+            chat = createNewChat(currentUser, message);
+        } else {
+            // If we have a chatId, try to find an existing chat
+            chat = chatService.findChatById(chatId);
+            if (chat == null) {
+                logger.error("Chat with id {} not found for user {}", chatId, currentUser.getId());
+                return badRequest().body(Map.of("error", "Chat not found with the given chatId."));
+            }
+            // Optionally verify that this chat belongs to the current user
+            if (!chat.getUser().getId().equals(currentUser.getId())) {
+                logger.error("User {} is not authorized to post to chat {}", currentUser.getId(), chatId);
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(Map.of("error", "You are not authorized to continue this chat."));
+            }
+        }
+
+        // Now we have either a new or existing chat
+        Long finalChatId = chat.getId();
+
+        // Save the user's message
         saveUserMessage(chat, message);
+        // Get the chatbot response
         String response = getChatGptResponse(message);
+        // Save the bot response
         saveBotMessage(chat, response);
 
-        return ok(Map.of("chatId", chatId, "message", response));
+        // Return the chatId and the bot's message
+        return ok(Map.of("chatId", finalChatId, "message", response));
     }
 
     /**
@@ -89,6 +106,8 @@ public class ChatController {
     public ResponseEntity<?> getMessagesForChat(
         @PathVariable Long chatId,
         @AuthenticationPrincipal User currentUser) {
+
+        logger.info("Received request to retrieve messages for chat id: {}", chatId);
 
         // Retrieve the Chat entity; assume chatService.findChatById exists.
         Chat chat = chatService.findChatById(chatId);

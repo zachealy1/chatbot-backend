@@ -52,6 +52,7 @@ public class Chat {
      * Messages associated with this chat.
      */
     @OneToMany(mappedBy = "chat", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnoreProperties({"chat"})
     private Set<Message> messages = new HashSet<>();
 
     /**
