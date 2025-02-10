@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -20,7 +21,9 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
 import uk.gov.hmcts.reform.demo.entities.Chat;
+import uk.gov.hmcts.reform.demo.entities.Message;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.services.ChatService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
@@ -39,10 +42,14 @@ public class ChatController {
         this.chatService = chatService;
     }
 
+    /**
+     * Chat endpoint to handle user queries and return chatbot responses with historical context.
+     */
     @PostMapping
     public ResponseEntity<Map<String, Object>> chat(
         @AuthenticationPrincipal User currentUser,
         @RequestBody Map<String, String> userInput) {
+
         logger.info("Received chat request: {}", userInput);
 
         // Ensure the user is authenticated
@@ -57,50 +64,48 @@ public class ChatController {
 
         logger.info("User sent message: {}", message);
 
+        // Parse chatId if provided
         String chatIdStr = userInput.get("chatId");
         Long chatId = parseChatId(chatIdStr);
 
+        // 1. Find or create a chat
         Chat chat;
-
-        // If no chatId, create a brand-new chat
         if (chatId == null) {
-            logger.info("No chatId provided; creating new chat.");
+            logger.info("No chatId provided; creating a new chat.");
             chat = createNewChat(currentUser, message);
         } else {
-            // If we have a chatId, try to find an existing chat
+            // Retrieve existing chat
             chat = chatService.findChatById(chatId);
             if (chat == null) {
                 logger.error("Chat with id {} not found for user {}", chatId, currentUser.getId());
                 return badRequest().body(Map.of("error", "Chat not found with the given chatId."));
             }
-            // Optionally verify that this chat belongs to the current user
             if (!chat.getUser().getId().equals(currentUser.getId())) {
                 logger.error("User {} is not authorized to post to chat {}", currentUser.getId(), chatId);
                 return ResponseEntity.status(HttpStatus.FORBIDDEN)
                     .body(Map.of("error", "You are not authorized to continue this chat."));
             }
         }
-
-        // Now we have either a new or existing chat
         Long finalChatId = chat.getId();
 
-        // Save the user's message
+        // 2. Save the user's new message
         saveUserMessage(chat, message);
-        // Get the chatbot response
-        String response = getChatGptResponse(message);
-        // Save the bot response
-        saveBotMessage(chat, response);
 
-        // Return the chatId and the bot's message
-        return ok(Map.of("chatId", finalChatId, "message", response));
+        // 3. Build entire conversation (including this new user message) from DB
+        List<Message> allMessages = chatService.getMessagesForChat(chat);
+
+        // 4. Call OpenAI with historical context
+        String botReply = getChatGptResponse(allMessages);
+
+        // 5. Save the bot's reply to DB
+        saveBotMessage(chat, botReply);
+
+        // 6. Return chatId and the bot's reply
+        return ok(Map.of("chatId", finalChatId, "message", botReply));
     }
 
     /**
      * GET endpoint to retrieve all messages for a given chat id.
-     *
-     * @param chatId The id of the chat.
-     * @param currentUser The currently authenticated user.
-     * @return A list of messages associated with the given chat id.
      */
     @GetMapping("/messages/{chatId}")
     public ResponseEntity<?> getMessagesForChat(
@@ -114,21 +119,18 @@ public class ChatController {
         if (chat == null) {
             return badRequest().body(Map.of("error", "Chat not found."));
         }
-        // Verify that the chat belongs to the current user.
+        // Verify that the chat belongs to the current user
         if (!chat.getUser().getId().equals(currentUser.getId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Map.of("error", "You are not authorized to view these messages."));
         }
-        // Get messages using the method that accepts a Chat.
+        // Get messages
         var messages = chatService.getMessagesForChat(chat);
         return ok(messages);
     }
 
     /**
      * GET endpoint to retrieve all chats for the currently authenticated user.
-     *
-     * @param currentUser The currently authenticated user.
-     * @return A list of chats associated with the user.
      */
     @GetMapping("/chats")
     public ResponseEntity<?> getChatsForUser(@AuthenticationPrincipal User currentUser) {
@@ -154,34 +156,29 @@ public class ChatController {
 
     /**
      * DELETE endpoint to delete a chat.
-     *
-     * @param chatId The id of the chat to be deleted.
-     * @param currentUser The currently authenticated user.
-     * @return A success message if deleted, or an error if not.
      */
     @DeleteMapping("/chats/{chatId}")
     public ResponseEntity<?> deleteChat(
         @PathVariable Long chatId,
         @AuthenticationPrincipal User currentUser) {
-        // Ensure the user is authenticated.
+        // Ensure the user is authenticated
         if (currentUser == null) {
             return badRequest().body(Map.of("error", "User not authenticated."));
         }
 
-        // Retrieve the Chat entity.
+        // Retrieve the Chat entity
         Chat chat = chatService.findChatById(chatId);
         if (chat == null) {
             return badRequest().body(Map.of("error", "Chat not found."));
         }
 
-        // Verify that the chat belongs to the current user.
+        // Verify that the chat belongs to the current user
         if (!chat.getUser().getId().equals(currentUser.getId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Map.of("error", "You are not authorized to delete this chat."));
         }
 
         try {
-            // Call the service method to delete the chat.
             chatService.deleteChat(chat);
             return ok(Map.of("message", "Chat deleted successfully."));
         } catch (Exception e) {
@@ -190,58 +187,30 @@ public class ChatController {
         }
     }
 
-    /**
-     * Parses the chatId from the input string.
-     *
-     * @param chatIdStr The chatId string from the request.
-     * @return The parsed chatId or null if invalid.
-     */
+    // ------------------ PRIVATE HELPER METHODS ------------------
+
     private Long parseChatId(String chatIdStr) {
         if (chatIdStr != null) {
             try {
                 return Long.parseLong(chatIdStr);
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("Invalid chatId format.");
+                logger.error("Invalid chatId format: {}", chatIdStr, e);
             }
         }
         return null;
     }
 
     /**
-     * Retrieves an existing chat or creates a new one.
-     *
-     * @param user    The user requesting the chat.
-     * @param chatId  The optional chat ID.
-     * @param message The user's message.
-     * @return The Chat object.
+     * Creates a new chat, optionally using the first user message to generate a summary if desired.
      */
-    private Chat getOrCreateChat(User user, Long chatId, String message) {
-        if (chatId != null) {
-            return chatService.getChatsForUser(user).stream()
-                .filter(c -> c.getId().equals(chatId))
-                .findFirst()
-                .orElseGet(() -> createNewChat(user, message));
-        }
-        return createNewChat(user, message);
-    }
-
-    /**
-     * Creates a new chat with a summarized description.
-     *
-     * @param user    The user starting the chat.
-     * @param message The initial message.
-     * @return The newly created chat.
-     */
-    private Chat createNewChat(User user, String message) {
-        String summary = chatGptApi.summarize(message);
+    private Chat createNewChat(User user, String initialMessage) {
+        // You can summarize the first message or just use "New chat"
+        String summary = chatGptApi.summarize(initialMessage);
         return chatService.createChat(user, summary);
     }
 
     /**
      * Saves the user's message in the database.
-     *
-     * @param chat    The chat to save the message in.
-     * @param message The user's message.
      */
     private void saveUserMessage(Chat chat, String message) {
         chatService.saveMessage(chat, "user", message);
@@ -249,23 +218,22 @@ public class ChatController {
     }
 
     /**
-     * Sends a message to ChatGPT and retrieves the response.
-     *
-     * @param message The user's message.
-     * @return The ChatGPT response.
-     */
-    private String getChatGptResponse(String message) {
-        return chatGptApi.chatGpt(message);
-    }
-
-    /**
      * Saves the chatbot's response in the database.
-     *
-     * @param chat     The chat to save the response in.
-     * @param response The chatbot's response.
      */
     private void saveBotMessage(Chat chat, String response) {
         chatService.saveMessage(chat, "chatbot", response);
         logger.info("Saved chatbot response: {}", response);
+    }
+
+    /**
+     * Calls OpenAI with all previous messages to maintain conversation context.
+     */
+    private String getChatGptResponse(List<Message> allMessages) {
+        // Convert your DB messages to the format expected by OpenAI
+        var openAiMessages = chatService.buildOpenAiConversation(allMessages);
+
+        // Actually call the ChatGPT API
+        String reply = chatGptApi.chatGptWithHistory(openAiMessages);
+        return reply;
     }
 }

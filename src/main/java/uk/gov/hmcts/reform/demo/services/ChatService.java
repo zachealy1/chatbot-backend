@@ -1,5 +1,7 @@
 package uk.gov.hmcts.reform.demo.services;
 
+import java.util.ArrayList;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import uk.gov.hmcts.reform.demo.entities.Chat;
@@ -98,5 +100,18 @@ public class ChatService {
         List<Message> messages = messageRepository.findByChat(chat);
         messageRepository.deleteAll(messages);
         chatRepository.delete(chat);
+    }
+
+    public List<Map<String, String>> buildOpenAiConversation(List<Message> dbMessages) {
+        // Optionally add a system role
+        List<Map<String, String>> openAiMessages = new ArrayList<>();
+        openAiMessages.add(Map.of("role", "system", "content", "You are a helpful assistant."));
+
+        // For each message, map "user" -> "user", "chatbot" -> "assistant"
+        for (Message m : dbMessages) {
+            String role = m.getSender().equals("user") ? "user" : "assistant";
+            openAiMessages.add(Map.of("role", role, "content", m.getMessage()));
+        }
+        return openAiMessages;
     }
 }
