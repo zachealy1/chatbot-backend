@@ -1,8 +1,15 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -129,7 +136,9 @@ public class AccountController {
     @PostMapping("/update")
     public ResponseEntity<String> updateUser(
         @AuthenticationPrincipal User currentUser,
-        @RequestBody Map<String, String> userDetailsMap) {
+        @RequestBody Map<String, String> userDetailsMap,
+        HttpServletRequest request,
+        HttpServletResponse response) {
 
         // Log whether an authenticated user was resolved
         if (currentUser == null) {
@@ -203,7 +212,73 @@ public class AccountController {
         userRepository.save(user);
         logger.info("User information saved successfully for user id: {}", user.getId());
 
+        // Refresh the authentication principal with the updated user data.
+        Authentication updatedAuthentication =
+            new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+        SecurityContextHolder.getContext().setAuthentication(updatedAuthentication);
+        new HttpSessionSecurityContextRepository()
+            .saveContext(SecurityContextHolder.getContext(), request, response);
+
         return ResponseEntity.ok("Account updated successfully.");
+    }
+
+
+    /**
+     * Returns the authenticated user's username.
+     */
+    @GetMapping("/username")
+    public ResponseEntity<String> getUsername(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not authenticated");
+        }
+        return ResponseEntity.ok(currentUser.getUsername());
+    }
+
+    /**
+     * Returns the authenticated user's email.
+     */
+    @GetMapping("/email")
+    public ResponseEntity<String> getEmail(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not authenticated");
+        }
+        return ResponseEntity.ok(currentUser.getEmail());
+    }
+
+    /**
+     * Returns the day (1-31) of the authenticated user's date of birth.
+     */
+    @GetMapping("/date-of-birth/day")
+    public ResponseEntity<Integer> getDateOfBirthDay(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null || currentUser.getDateOfBirth() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        int day = currentUser.getDateOfBirth().getDayOfMonth();
+        return ResponseEntity.ok(day);
+    }
+
+    /**
+     * Returns the month (1-12) of the authenticated user's date of birth.
+     */
+    @GetMapping("/date-of-birth/month")
+    public ResponseEntity<Integer> getDateOfBirthMonth(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null || currentUser.getDateOfBirth() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        int month = currentUser.getDateOfBirth().getMonthValue();
+        return ResponseEntity.ok(month);
+    }
+
+    /**
+     * Returns the year of the authenticated user's date of birth.
+     */
+    @GetMapping("/date-of-birth/year")
+    public ResponseEntity<Integer> getDateOfBirthYear(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null || currentUser.getDateOfBirth() == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+        int year = currentUser.getDateOfBirth().getYear();
+        return ResponseEntity.ok(year);
     }
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
