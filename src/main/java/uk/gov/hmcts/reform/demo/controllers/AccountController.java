@@ -24,7 +24,6 @@ import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import uk.gov.hmcts.reform.demo.security.AccountUserDetails;
 
 import static org.springframework.http.ResponseEntity.badRequest;
 import static org.springframework.http.ResponseEntity.ok;
@@ -129,15 +128,21 @@ public class AccountController {
 
     @PostMapping("/update")
     public ResponseEntity<String> updateUser(
-        @AuthenticationPrincipal AccountUserDetails currentUserDetails,
+        @AuthenticationPrincipal User currentUser,
         @RequestBody Map<String, String> userDetailsMap) {
 
-        logger.info("UpdateUser called for user with id: {}", currentUserDetails.getId());
+        // Log whether an authenticated user was resolved
+        if (currentUser == null) {
+            logger.error("No authenticated user found. Authentication principal is null. "
+                             + "The request may be missing a valid session cookie or CSRF token.");
+            return ResponseEntity.status(401).body("User not authenticated.");
+        }
+        logger.info("UpdateUser called for user with id: {}", currentUser.getId());
 
-        // Look up the user by the authenticated user's ID
-        Optional<User> optionalUser = userRepository.findById(currentUserDetails.getId());
+        // Look up the user by the authenticated user's ID.
+        Optional<User> optionalUser = userRepository.findById(currentUser.getId());
         if (!optionalUser.isPresent()) {
-            logger.error("User with id {} not found in database", currentUserDetails.getId());
+            logger.error("User with id {} not found in database", currentUser.getId());
             return ResponseEntity.badRequest().body("User not found.");
         }
         User user = optionalUser.get();
@@ -194,13 +199,12 @@ public class AccountController {
             logger.info("No new password provided; skipping password update.");
         }
 
-        // Save the updated user
+        // Save updated user information
         userRepository.save(user);
         logger.info("User information saved successfully for user id: {}", user.getId());
 
         return ResponseEntity.ok("Account updated successfully.");
     }
-
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         String username = userDetails.get("username");
@@ -224,11 +228,9 @@ public class AccountController {
             return badRequest().body(existenceError);
         }
 
-        // ✅ Save the User First
         User newUser = createNewUser(username, email, passwordEncoder.encode(password), dateOfBirth, isAdmin);
         newUser = userRepository.save(newUser); // 🔹 Save User to Database First
 
-        // ✅ Now Save AccountRequest (User Exists)
         AccountRequest accountRequest = new AccountRequest();
         accountRequest.setUser(newUser);
         accountRequest.setStatus(AccountRequest.Status.PENDING);

@@ -77,3 +77,4 @@ logging:
     org.springframework.security: DEBUG
     org.springframework.security.web.csrf: TRACE
     uk.gov.hmcts.reform.demo: DEBUG
+    org.springframework.web.filter.CommonsRequestLoggingFilter: DEBUG
