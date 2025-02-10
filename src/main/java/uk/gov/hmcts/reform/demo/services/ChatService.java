@@ -78,4 +78,14 @@ public class ChatService {
     public List<Message> getMessagesForChat(Chat chat) {
         return messageRepository.findByChat(chat);
     }
+
+    /**
+     * Finds and returns the Chat with the specified chatId.
+     *
+     * @param chatId The ID of the chat to retrieve.
+     * @return The Chat object if found; otherwise, null.
+     */
+    public Chat findChatById(Long chatId) {
+        return chatRepository.findById(chatId).orElse(null);
+    }
 }

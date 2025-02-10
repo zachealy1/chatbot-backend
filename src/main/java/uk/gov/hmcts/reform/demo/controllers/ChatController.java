@@ -3,13 +3,22 @@ package uk.gov.hmcts.reform.demo.controllers;
 import static org.springframework.http.ResponseEntity.badRequest;
 import static org.springframework.http.ResponseEntity.ok;
 
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.User;
@@ -17,6 +26,7 @@ import uk.gov.hmcts.reform.demo.services.ChatService;
 import uk.gov.hmcts.reform.demo.utils.ChatGptApi;
 
 @RestController
+@RequestMapping("/chat")
 public class ChatController {
 
     private static final Logger logger = LoggerFactory.getLogger(ChatController.class);
@@ -36,7 +46,7 @@ public class ChatController {
      * @param userInput   A map containing the user's input message and optional chatId.
      * @return Chatbot response along with chatId.
      */
-    @PostMapping("/chat")
+    @PostMapping
     public ResponseEntity<Map<String, Object>> chat(
         @AuthenticationPrincipal User currentUser,
         @RequestBody Map<String, String> userInput) {
@@ -66,6 +76,70 @@ public class ChatController {
         saveBotMessage(chat, response);
 
         return ok(Map.of("chatId", chatId, "message", response));
+    }
+
+    /**
+     * GET endpoint to retrieve all messages for a given chat id.
+     * This method first retrieves the Chat entity using the chat id, then calls
+     * getMessagesForChat(Chat chat) to fetch the messages.
+     *
+     * @param chatId The id of the chat.
+     * @param currentUser The currently authenticated user.
+     * @return A list of messages associated with the given chat id.
+     */
+    @GetMapping("/messages/{chatId}")
+    public ResponseEntity<?> getMessagesForChat(
+        @PathVariable Long chatId,
+        @AuthenticationPrincipal User currentUser) {
+
+        // Retrieve the Chat entity; assume chatService.findChatById exists.
+        Chat chat = chatService.findChatById(chatId);
+        if (chat == null) {
+            return badRequest().body(Map.of("error", "Chat not found."));
+        }
+        // Optional: verify that the chat belongs to the current user.
+        if (!chat.getUser().getId().equals(currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "You are not authorized to view these messages."));
+        }
+        // Get messages using the method that accepts a Chat.
+        var messages = chatService.getMessagesForChat(chat);
+        return ok(messages);
+    }
+
+    /**
+     * GET endpoint to retrieve all chats for the currently authenticated user.
+     *
+     * @param currentUser The currently authenticated user.
+     * @return A list of chats associated with the user.
+     */
+    @GetMapping("/chats")
+    public ResponseEntity<?> getChatsForUser(@AuthenticationPrincipal User currentUser) {
+        if (currentUser == null) {
+            return badRequest().body(Map.of("error", "User not authenticated."));
+        }
+        try {
+            // Retrieve the chats for the user
+            List<Chat> chats = chatService.getChatsForUser(currentUser);
+
+            // Define the desired date format, e.g., "10 Feb 2025, 14:31"
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
+
+            // Map each Chat to a DTO containing id, description, and formatted createdAt.
+            List<Map<String, Object>> chatDtos = chats.stream().map(chat -> {
+                Map<String, Object> dto = new HashMap<>();
+                dto.put("id", chat.getId());
+                dto.put("description", chat.getDescription());
+                // Format the createdAt field if it is not null.
+                dto.put("createdAt", chat.getCreatedAt() != null ? chat.getCreatedAt().format(formatter) : null);
+                return dto;
+            }).collect(Collectors.toList());
+
+            return ok(chatDtos);
+        } catch (Exception e) {
+            logger.error("Error retrieving chats for user id {}: {}", currentUser.getId(), e.getMessage());
+            return badRequest().body(Map.of("error", "Unable to retrieve chats for the user."));
+        }
     }
 
     /**
