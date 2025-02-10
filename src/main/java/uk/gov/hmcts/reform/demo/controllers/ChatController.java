@@ -7,13 +7,13 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -80,8 +80,6 @@ public class ChatController {
 
     /**
      * GET endpoint to retrieve all messages for a given chat id.
-     * This method first retrieves the Chat entity using the chat id, then calls
-     * getMessagesForChat(Chat chat) to fetch the messages.
      *
      * @param chatId The id of the chat.
      * @param currentUser The currently authenticated user.
@@ -97,7 +95,7 @@ public class ChatController {
         if (chat == null) {
             return badRequest().body(Map.of("error", "Chat not found."));
         }
-        // Optional: verify that the chat belongs to the current user.
+        // Verify that the chat belongs to the current user.
         if (!chat.getUser().getId().equals(currentUser.getId())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(Map.of("error", "You are not authorized to view these messages."));
@@ -119,26 +117,57 @@ public class ChatController {
             return badRequest().body(Map.of("error", "User not authenticated."));
         }
         try {
-            // Retrieve the chats for the user
             List<Chat> chats = chatService.getChatsForUser(currentUser);
-
-            // Define the desired date format, e.g., "10 Feb 2025, 14:31"
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm");
-
-            // Map each Chat to a DTO containing id, description, and formatted createdAt.
             List<Map<String, Object>> chatDtos = chats.stream().map(chat -> {
                 Map<String, Object> dto = new HashMap<>();
                 dto.put("id", chat.getId());
                 dto.put("description", chat.getDescription());
-                // Format the createdAt field if it is not null.
                 dto.put("createdAt", chat.getCreatedAt() != null ? chat.getCreatedAt().format(formatter) : null);
                 return dto;
             }).collect(Collectors.toList());
-
             return ok(chatDtos);
         } catch (Exception e) {
             logger.error("Error retrieving chats for user id {}: {}", currentUser.getId(), e.getMessage());
             return badRequest().body(Map.of("error", "Unable to retrieve chats for the user."));
+        }
+    }
+
+    /**
+     * DELETE endpoint to delete a chat.
+     *
+     * @param chatId The id of the chat to be deleted.
+     * @param currentUser The currently authenticated user.
+     * @return A success message if deleted, or an error if not.
+     */
+    @DeleteMapping("/chats/{chatId}")
+    public ResponseEntity<?> deleteChat(
+        @PathVariable Long chatId,
+        @AuthenticationPrincipal User currentUser) {
+        // Ensure the user is authenticated.
+        if (currentUser == null) {
+            return badRequest().body(Map.of("error", "User not authenticated."));
+        }
+
+        // Retrieve the Chat entity.
+        Chat chat = chatService.findChatById(chatId);
+        if (chat == null) {
+            return badRequest().body(Map.of("error", "Chat not found."));
+        }
+
+        // Verify that the chat belongs to the current user.
+        if (!chat.getUser().getId().equals(currentUser.getId())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(Map.of("error", "You are not authorized to delete this chat."));
+        }
+
+        try {
+            // Call the service method to delete the chat.
+            chatService.deleteChat(chat);
+            return ok(Map.of("message", "Chat deleted successfully."));
+        } catch (Exception e) {
+            logger.error("Error deleting chat id {}: {}", chatId, e.getMessage());
+            return badRequest().body(Map.of("error", "Unable to delete chat."));
         }
     }
 

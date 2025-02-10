@@ -88,4 +88,15 @@ public class ChatService {
     public Chat findChatById(Long chatId) {
         return chatRepository.findById(chatId).orElse(null);
     }
+
+    /**
+     * Deletes the provided chat.
+     * @param chat The Chat entity to delete.
+     */
+    @Transactional
+    public void deleteChat(Chat chat) {
+        List<Message> messages = messageRepository.findByChat(chat);
+        messageRepository.deleteAll(messages);
+        chatRepository.delete(chat);
+    }
 }
