@@ -41,6 +41,7 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/swagger-ui.html",
                     "/login/chat",
+                    "/login/admin",
                     "/account/register",
                     "/account/register/admin",
                     "/forgot-password/enter-email",
