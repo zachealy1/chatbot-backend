@@ -2,6 +2,7 @@ package uk.gov.hmcts.reform.demo.controllers;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.GetMapping;
+import uk.gov.hmcts.reform.demo.dto.AccountSummary;
+import uk.gov.hmcts.reform.demo.dto.PendingRequestSummary;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.AccountRequestRepository;
@@ -102,13 +105,45 @@ public class AccountController {
         return ResponseEntity.ok("Account request rejected, and user has been deleted.");
     }
 
+    @GetMapping("/all")
+    public ResponseEntity<List<AccountSummary>> listAllAccounts(
+        @AuthenticationPrincipal User currentUser
+    ) {
+        if (currentUser == null || !currentUser.getIsAdmin()) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
+        var summaries = userRepository.findAll().stream()
+            .map(u -> new AccountSummary(
+                u.getId(),
+                u.getUsername(),
+                u.getEmail(),
+                u.getIsAdmin() ? "Admin" : "User",
+                u.getCreatedAt()
+            ))
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok(summaries);
+    }
+
     /**
      * Retrieves all pending account requests.
      */
     @GetMapping("/pending")
-    public ResponseEntity<List<AccountRequest>> getPendingAccountRequests() {
-        List<AccountRequest> pendingRequests = accountRequestRepository.findByStatus(AccountRequest.Status.PENDING);
-        return ResponseEntity.ok(pendingRequests);
+    public ResponseEntity<List<PendingRequestSummary>> getPendingAccountRequests() {
+        List<PendingRequestSummary> summaries = accountRequestRepository
+            .findByStatus(AccountRequest.Status.PENDING)
+            .stream()
+            .map(r -> new PendingRequestSummary(
+                r.getId(),
+                r.getUser().getUsername(),
+                r.getUser().getEmail(),
+                r.getStatus().name(),
+                r.getRequestedAt()
+            ))
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok(summaries);
     }
 
     /**

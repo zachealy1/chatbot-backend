@@ -1,6 +1,7 @@
 package uk.gov.hmcts.reform.demo.dto;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 public class PendingRequestSummary {
 
@@ -8,10 +9,10 @@ public class PendingRequestSummary {
     String userName;
     String email;
     String status;
-    LocalDate submittedDate;
+    LocalDateTime submittedDate;
 
     public PendingRequestSummary(Long requestId, String userName, String email,
-                                 String status, LocalDate submittedDate) {
+                                 String status, LocalDateTime submittedDate) {
         this.requestId = requestId;
         this.userName = userName;
         this.email = email;
@@ -51,11 +52,11 @@ public class PendingRequestSummary {
         this.status = status;
     }
 
-    public LocalDate getSubmittedDate() {
+    public LocalDateTime getSubmittedDate() {
         return submittedDate;
     }
 
-    public void setSubmittedDate(LocalDate submittedDate) {
+    public void setSubmittedDate(LocalDateTime submittedDate) {
         this.submittedDate = submittedDate;
     }
 }
