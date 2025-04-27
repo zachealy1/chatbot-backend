@@ -1,31 +1,38 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Period;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import uk.gov.hmcts.reform.demo.dto.SessionActivity;
 import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.ChatRepository;
+import uk.gov.hmcts.reform.demo.repositories.SessionRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
-
-import java.time.LocalDate;
-
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/statistics")
 public class StatisticsController {
 
+    private final SessionRepository sessionRepository;
     private final UserRepository userRepository;
     private final ChatRepository chatRepository;
 
-    public StatisticsController(UserRepository userRepository, ChatRepository chatRepository) {
+    public StatisticsController(SessionRepository sessionRepository,
+                                UserRepository userRepository, ChatRepository chatRepository) {
+        this.sessionRepository = sessionRepository;
         this.userRepository = userRepository;
         this.chatRepository = chatRepository;
     }
@@ -34,10 +41,40 @@ public class StatisticsController {
      * Retrieves user activity across age groups.
      */
     @GetMapping("/user-activity")
-    public ResponseEntity<Map<String, Long>> getUserActivityStats() {
-        List<User> users = userRepository.findAll();
-        Map<String, Long> ageGroups = calculateUserAgeGroups(users);
-        return ResponseEntity.ok(ageGroups);
+    public ResponseEntity<List<SessionActivity>> getUserActivity() {
+        List<SessionActivity> activities = sessionRepository.findAll().stream()
+            .map(session -> {
+                // 1) find the user linked to this session
+                //    (assumes Session has a getUserId() or similar)
+                var userOpt = userRepository.findById(session.getUser().getId());
+                if (userOpt.isEmpty()) {
+                    // skip orphaned sessions
+                    return null;
+                }
+                User user = userOpt.get();
+
+                // 2) compute their age
+                int age = Period.between(user.getDateOfBirth(), LocalDate.now()).getYears();
+
+                // 3) bucket into a group
+                String bucket;
+                if (age <= 30) {
+                    bucket = "20 to 30";
+                } else if (age <= 40) {
+                    bucket = "31 to 40";
+                } else if (age <= 50) {
+                    bucket = "41 to 50";
+                } else {
+                    bucket = "51 and over";
+                }
+
+                // 4) build the DTO
+                return new SessionActivity(session.getCreatedAt(), bucket);
+            })
+            .filter(Objects::nonNull)
+            .collect(Collectors.toList());
+
+        return ResponseEntity.ok(activities);
     }
 
     /**
@@ -46,21 +83,50 @@ public class StatisticsController {
     @GetMapping("/chat-category-breakdown")
     public ResponseEntity<Map<String, Map<String, Double>>> getChatCategoryBreakdown() {
         List<User> users = userRepository.findAll();
-        List<Chat> chats = chatRepository.findAll();
+        List<Chat>  chats = chatRepository.findAll();
+        LocalDate today = LocalDate.now();
 
-        // Group users by age range
+        // build overall user‐buckets
         Map<String, Long> userAgeGroups = calculateUserAgeGroups(users);
 
-        // Get the most popular chat categories
+        // count chats per category
         Map<String, Long> categoryCounts = getPopularChatCategories(chats);
 
-        // Calculate percentage of users in each age range interacting with each category
-        Map<String, Map<String, Double>> breakdown = calculateChatCategoryBreakdown(
-            users,
-            chats,
-            userAgeGroups,
-            categoryCounts
-        );
+        // take top 6
+        List<String> topCats = categoryCounts.entrySet().stream()
+            .sorted(Map.Entry.<String,Long>comparingByValue(Comparator.reverseOrder()))
+            .limit(6)
+            .map(Map.Entry::getKey)
+            .toList();
+
+        Map<String, Map<String, Double>> breakdown = new LinkedHashMap<>();
+
+        for (String cat : topCats) {
+            // first find the set of distinct user-IDs who chatted in this category
+            Set<Long> interactedUserIds = chats.stream()
+                .filter(c -> c.getDescription().equals(cat))
+                .map(c -> c.getUser().getId())
+                .collect(Collectors.toSet());
+
+            double totalInteracted = interactedUserIds.size();
+            Map<String, Double> pctByBucket = new LinkedHashMap<>();
+
+            for (String bucket : userAgeGroups.keySet()) {
+                // count how many of those interacted users fall in this bucket
+                long inBucket = users.stream()
+                    .filter(u -> interactedUserIds.contains(u.getId()))
+                    .filter(u -> isUserInAgeGroup(u.getDateOfBirth(), today, bucket))
+                    .count();
+
+                double pct = totalInteracted > 0
+                    ? (inBucket / totalInteracted) * 100.0
+                    : 0.0;
+
+                pctByBucket.put(bucket, pct);
+            }
+
+            breakdown.put(cat, pctByBucket);
+        }
 
         return ResponseEntity.ok(breakdown);
     }

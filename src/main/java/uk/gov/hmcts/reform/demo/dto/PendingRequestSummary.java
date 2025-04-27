@@ -1,6 +1,5 @@
 package uk.gov.hmcts.reform.demo.dto;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 public class PendingRequestSummary {
