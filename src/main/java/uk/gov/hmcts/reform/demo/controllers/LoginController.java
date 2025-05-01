@@ -1,27 +1,23 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.RequestContextUtils;
 import uk.gov.hmcts.reform.demo.dto.LoginRequest;
 import uk.gov.hmcts.reform.demo.entities.Session;
 import uk.gov.hmcts.reform.demo.entities.User;
@@ -37,77 +33,66 @@ public class LoginController {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final SessionRepository sessionRepository;
+    private final MessageSource messages;
 
     public LoginController(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                           SessionRepository sessionRepository) {
+                           SessionRepository sessionRepository, MessageSource messages) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.sessionRepository = sessionRepository;
+        this.messages = messages;
     }
 
-    // Notice that we now add HttpServletRequest as a parameter.
     @PostMapping("/chat")
     public ResponseEntity<?> login(@RequestBody LoginRequest credentials,
-                                   HttpServletResponse response,
-                                   HttpServletRequest request) {
-        return authenticateUser(credentials, false, response, request);
+                                   HttpServletRequest request,
+                                   HttpServletResponse response) {
+        return authenticateUser(credentials, false, request, response);
     }
 
     @PostMapping("/admin")
     public ResponseEntity<?> loginAdmin(@RequestBody LoginRequest credentials,
-                                        HttpServletResponse response,
-                                        HttpServletRequest request) {
-        return authenticateUser(credentials, true, response, request);
+                                        HttpServletRequest request,
+                                        HttpServletResponse response) {
+        return authenticateUser(credentials, true, request, response);
     }
 
-    private ResponseEntity<?> authenticateUser(LoginRequest credentials, boolean isAdminLogin,
-                                               HttpServletResponse response,
-                                               HttpServletRequest request) {
+    private ResponseEntity<?> authenticateUser(LoginRequest credentials,
+                                               boolean isAdminLogin,
+                                               HttpServletRequest request,
+                                               HttpServletResponse response) {
+        Locale locale = RequestContextUtils.getLocale(request);
+
         String username = credentials.getUsername();
         String password = credentials.getPassword();
 
         if (!isValidCredentials(username, password)) {
-            return ResponseEntity.badRequest().body("Username and password are required.");
+            String msg = messages.getMessage("login.required", null, locale);
+            return ResponseEntity.badRequest().body(msg);
         }
 
         Optional<User> optionalUser = userRepository.findByUsername(username);
         if (optionalUser.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password.");
+            String msg = messages.getMessage("login.invalid", null, locale);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(msg);
         }
         User user = optionalUser.get();
 
         if (!isAuthorizedUser(user, isAdminLogin)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(isAdminLogin ? "Admin access denied."
-                          : "Your account is not allowed to log in. Please contact support.");
+            String code = isAdminLogin ? "login.admin.denied" : "login.user.denied";
+            String msg  = messages.getMessage(code, null, locale);
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(msg);
         }
 
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid username or password.");
+            String msg = messages.getMessage("login.invalid", null, locale);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(msg);
         }
 
-        // --- Set the Authentication in the SecurityContext ---
-        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
-        if (user.getIsAdmin() != null && user.getIsAdmin()) {
-            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-        } else {
-            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
-        }
-        Authentication authentication =
-            new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        // Save the SecurityContext in the session so that subsequent requests see the authenticated user.
-        new HttpSessionSecurityContextRepository().saveContext(SecurityContextHolder.getContext(), request, response);
-        logger.info("Authentication set for user: {}", username);
-        // -----------------------------------------------------
-
-        // Create a session record (for your own tracking) and let the container manage the JSESSIONID cookie.
-        return createSession(
-            user,
-            isAdminLogin ? "Admin logged in successfully." : "User logged in successfully.",
-            response
-        );
+        // … success path …
+        String successKey = isAdminLogin ? "login.success.admin" : "login.success.user";
+        String successMsg = messages.getMessage(successKey, null, locale);
+        return createSession(user, successMsg, response);
     }
 
     private ResponseEntity<?> createSession(User user, String successMessage, HttpServletResponse response) {
