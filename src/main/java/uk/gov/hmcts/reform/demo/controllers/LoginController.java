@@ -3,6 +3,8 @@ package uk.gov.hmcts.reform.demo.controllers;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -12,7 +14,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,20 +64,25 @@ public class LoginController {
         return authenticateUser(credentials, true, request, response);
     }
 
-    private ResponseEntity<?> authenticateUser(LoginRequest credentials,
-                                               boolean isAdminLogin,
-                                               HttpServletRequest request,
-                                               HttpServletResponse response) {
+    private ResponseEntity<?> authenticateUser(
+        LoginRequest credentials,
+        boolean isAdminLogin,
+        HttpServletRequest request,
+        HttpServletResponse response
+    ) {
+        // Resolve locale from the request
         Locale locale = RequestContextUtils.getLocale(request);
 
         String username = credentials.getUsername();
         String password = credentials.getPassword();
 
+        // 1) Basic non-empty check
         if (!isValidCredentials(username, password)) {
             String msg = messages.getMessage("login.required", null, locale);
             return ResponseEntity.badRequest().body(msg);
         }
 
+        // 2) Lookup user
         Optional<User> optionalUser = userRepository.findByUsername(username);
         if (optionalUser.isEmpty()) {
             String msg = messages.getMessage("login.invalid", null, locale);
@@ -78,22 +90,44 @@ public class LoginController {
         }
         User user = optionalUser.get();
 
+        // 3) Authorization (admin vs normal)
         if (!isAuthorizedUser(user, isAdminLogin)) {
-            String code = isAdminLogin ? "login.admin.denied" : "login.user.denied";
-            String msg  = messages.getMessage(code, null, locale);
+            String key = isAdminLogin ? "login.admin.denied" : "login.user.denied";
+            String msg = messages.getMessage(key, null, locale);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(msg);
         }
 
+        // 4) Password check
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             String msg = messages.getMessage("login.invalid", null, locale);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(msg);
         }
 
-        // … success path …
+        // --- exactly as before: set up Spring SecurityContext ---
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>();
+        if (Boolean.TRUE.equals(user.getIsAdmin())) {
+            authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+        } else {
+            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
+        }
+
+        Authentication authentication =
+            new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        // Persist into the HTTP session so subsequent requests are authenticated
+        new HttpSessionSecurityContextRepository()
+            .saveContext(SecurityContextHolder.getContext(), request, response);
+        logger.info("Authentication set for user: {}", username);
+        // -----------------------------------------------------
+
+        // 5) Success path: localized success message
         String successKey = isAdminLogin ? "login.success.admin" : "login.success.user";
         String successMsg = messages.getMessage(successKey, null, locale);
+
         return createSession(user, successMsg, response);
     }
+
 
     private ResponseEntity<?> createSession(User user, String successMessage, HttpServletResponse response) {
         // Generate a custom session token for your own use (this is independent of the container-managed session).
