@@ -1,26 +1,38 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import static org.springframework.http.ResponseEntity.badRequest;
+import static org.springframework.http.ResponseEntity.ok;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeParseException;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSource;
+import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.bind.annotation.GetMapping;
 import uk.gov.hmcts.reform.demo.dto.AccountSummary;
 import uk.gov.hmcts.reform.demo.dto.PendingRequestSummary;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
@@ -28,28 +40,20 @@ import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.AccountRequestRepository;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeParseException;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-
-import static org.springframework.http.ResponseEntity.badRequest;
-import static org.springframework.http.ResponseEntity.ok;
-
 @RestController
 @RequestMapping("/account")
 public class AccountController {
 
     private static final Logger logger = LoggerFactory.getLogger(AccountController.class);
 
+    private final MessageSource messages;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AccountRequestRepository accountRequestRepository;
 
-    public AccountController(UserRepository userRepository, PasswordEncoder passwordEncoder,
+    public AccountController(MessageSource messages, UserRepository userRepository, PasswordEncoder passwordEncoder,
                              AccountRequestRepository accountRequestRepository) {
+        this.messages = messages;
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.accountRequestRepository = accountRequestRepository;
@@ -317,36 +321,50 @@ public class AccountController {
     }
 
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
-        String username = userDetails.get("username");
-        String email = userDetails.get("email");
-        String password = userDetails.get("password");
-        String confirmPassword = userDetails.get("confirmPassword");
-        String dateOfBirthStr = userDetails.get("dateOfBirth");
+        Locale locale = LocaleContextHolder.getLocale();
 
+        String username        = userDetails.get("username");
+        String email           = userDetails.get("email");
+        String password        = userDetails.get("password");
+        String confirmPassword = userDetails.get("confirmPassword");
+        String dateOfBirthStr  = userDetails.get("dateOfBirth");
+
+        // 1) required-fields check
         String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
         if (validationError != null) {
-            return badRequest().body(validationError);
+            // validationError should now be a message key, e.g. "error.required.fields"
+            String msg = messages.getMessage(validationError, null, locale);
+            return ResponseEntity.badRequest().body(msg);
         }
 
+        // 2) parse DOB
         LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
         if (dateOfBirth == null) {
-            return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
+            String msg = messages.getMessage("error.invalid.date", null, locale);
+            return ResponseEntity.badRequest().body(msg);
         }
 
+        // 3) check existence
         String existenceError = checkUserExistence(username, email);
         if (existenceError != null) {
-            return badRequest().body(existenceError);
+            // existenceError should now be a key, e.g. "error.user.exists"
+            String msg = messages.getMessage(existenceError, null, locale);
+            return ResponseEntity.badRequest().body(msg);
         }
 
+        // 4) create user + account request
         User newUser = createNewUser(username, email, passwordEncoder.encode(password), dateOfBirth, isAdmin);
-        newUser = userRepository.save(newUser); // 🔹 Save User to Database First
+        userRepository.save(newUser);
 
-        AccountRequest accountRequest = new AccountRequest();
-        accountRequest.setUser(newUser);
-        accountRequest.setStatus(AccountRequest.Status.PENDING);
-        accountRequestRepository.save(accountRequest);
+        AccountRequest req = new AccountRequest();
+        req.setUser(newUser);
+        req.setStatus(AccountRequest.Status.PENDING);
+        accountRequestRepository.save(req);
 
-        return ok(isAdmin ? "Admin registered successfully." : "User registered successfully.");
+        // 5) success message
+        String successKey = isAdmin ? "success.admin.registered" : "success.user.registered";
+        String successMsg = messages.getMessage(successKey, null, locale);
+        return ResponseEntity.ok(successMsg);
     }
 
     /**
