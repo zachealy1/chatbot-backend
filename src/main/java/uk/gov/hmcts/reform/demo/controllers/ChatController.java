@@ -205,7 +205,7 @@ public class ChatController {
      */
     private Chat createNewChat(User user, String initialMessage) {
         // You can summarize the first message or just use "New chat"
-        String summary = chatGptApi.summarize(initialMessage);
+        String summary = chatGptApi.categorise(initialMessage);
         return chatService.createChat(user, summary);
     }
 

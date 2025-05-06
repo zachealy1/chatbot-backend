@@ -38,46 +38,23 @@ public class ChatGptApi {
     /**
      * Original summarize method (left untouched).
      */
-    public String summarize(String message) {
-        String url = "https://api.openai.com/v1/chat/completions";
-        String model = "gpt-4";
+    public String categorise(String message) {
+        logger.info("Summarize called for message: {}", message);
 
-        try {
-            HttpURLConnection connection = openApiConnection(url);
+        // Build a single‐message conversation for the Assistant
+        List<Map<String, String>> conversation = List.of(
+            Map.of("role", "user", "content", message)
+        );
 
-            // Define the prompt for summarization
-            String prompt = "Please provide a concise one-sentence summary of the following message:\n\n\""
-                + message + "\"";
+        // Your custom summarization assistant ID
+        String assistantId = "asst_F5Q8YV7e2ntIYd2SPjeHyFSP";
+        logger.debug("Using assistant {} to summarize", assistantId);
 
-            // Construct JSON request body
-            String jsonInputString = "{"
-                + "\"model\": \"" + model + "\", "
-                + "\"messages\": ["
-                + "{\"role\": \"system\", \"content\": \"You are a helpful assistant.\"}, "
-                + "{\"role\": \"user\", \"content\": \"" + escapeJson(prompt) + "\"}"
-                + "], "
-                + "\"max_tokens\": 50, "
-                + "\"temperature\": 0.5"
-                + "}";
+        // Delegate to the Threads-based method
+        String summary = chatGptWithAssistant(conversation, assistantId);
 
-            // Send request
-            sendJsonRequest(connection, jsonInputString);
-
-            // Read response
-            int status = connection.getResponseCode();
-            String response = readResponse(connection);
-
-            if (status >= 200 && status < 300) {
-                return extractMessageFromJsonResponse(response);
-            } else {
-                String errorMsg = extractErrorMessage(response);
-                throw new RuntimeException("ChatGPT API request for summary "
-                                               + "failed with status " + status + ": " + errorMsg);
-            }
-
-        } catch (IOException e) {
-            throw new RuntimeException("Error communicating with ChatGPT API for summary: " + e.getMessage(), e);
-        }
+        logger.info("Summary result: {}", summary);
+        return summary;
     }
 
     public String chatGptWithAssistant(List<Map<String, String>> conversation, String assistantId) {
@@ -246,7 +223,6 @@ public class ChatGptApi {
         logger.debug("Extracted latest assistant content (ts={}): {}", latestTimestamp, result);
         return result;
     }
-
 
 
     private HttpURLConnection openApiConnection(String urlStr) throws IOException {
