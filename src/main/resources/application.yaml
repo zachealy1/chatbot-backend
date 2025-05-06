@@ -24,7 +24,7 @@ springdoc:
 
 openai:
   api:
-    key: ${CGI_OPENAI_KEY}
+    key: ${ZAC_OPENAI_KEY}
 
 spring:
   config:

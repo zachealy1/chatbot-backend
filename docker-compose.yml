@@ -25,7 +25,7 @@ services:
       - LOGBACK_REQUIRE_ERROR_CODE=false
 
       # API specific environment variables
-      - CGI_OPENAI_KEY=${CGI_OPENAI_KEY}
+      - ZAC_OPENAI_KEY=${ZAC_OPENAI_KEY}
 
       # Database connection environment variables
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/chatbotdb

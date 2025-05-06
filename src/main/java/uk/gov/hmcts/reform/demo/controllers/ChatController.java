@@ -229,11 +229,12 @@ public class ChatController {
      * Calls OpenAI with all previous messages to maintain conversation context.
      */
     private String getChatGptResponse(List<Message> allMessages) {
-        // Convert your DB messages to the format expected by OpenAI
+        // 1) Convert your DB messages to the OpenAI format
         var openAiMessages = chatService.buildOpenAiConversation(allMessages);
 
-        // Actually call the ChatGPT API
-        String reply = chatGptApi.chatGptWithHistory(openAiMessages);
+        // 2) Use your custom assistant via the Threads API
+        String reply = chatGptApi.chatGptWithAssistant(openAiMessages, "asst_r7lsEYQTszrXGzSFlt8UAOH9");
+
         return reply;
     }
 }
