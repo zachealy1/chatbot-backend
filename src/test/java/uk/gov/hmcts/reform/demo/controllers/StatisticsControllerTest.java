@@ -174,4 +174,89 @@ class StatisticsControllerTest {
         verify(chatRepository).findAll();
     }
 
+    @Test
+    void noChats_returnsEmptyList() {
+        when(chatRepository.findAll()).thenReturn(List.of());
+
+        ResponseEntity<List<Map<String, Object>>> resp = controller.getPopularChatCategories();
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().isEmpty());
+        verify(chatRepository).findAll();
+    }
+
+    @Test
+    void singleCategory_returnsOneEntryWithCorrectStats() {
+        LocalDateTime t1 = LocalDateTime.of(2022,1,1,10,0);
+        LocalDateTime t2 = LocalDateTime.of(2022,1,1,11,0);
+        Chat c1 = new Chat(); c1.setDescription("catX"); c1.setCreatedAt(t2);
+        Chat c2 = new Chat(); c2.setDescription("catX"); c2.setCreatedAt(t1);
+        Chat c3 = new Chat(); c3.setDescription("catX"); c3.setCreatedAt(t2.plusHours(1));
+
+        when(chatRepository.findAll()).thenReturn(List.of(c1, c2, c3));
+
+        var resp = controller.getPopularChatCategories();
+        assertEquals(200, resp.getStatusCodeValue());
+        var list = resp.getBody();
+        assertEquals(1, list.size());
+
+        Map<String,Object> stats = list.get(0);
+        assertEquals("catX", stats.get("name"));
+        assertEquals(3L, ((Long)stats.get("queries")).longValue());
+        assertEquals(t1, stats.get("firstQuery"));
+        assertEquals(t2.plusHours(1), stats.get("lastQuery"));
+        assertEquals(1, ((Integer)stats.get("order")).intValue());
+
+        verify(chatRepository).findAll();
+    }
+
+    @Test
+    void multipleCategories_sortedByCountAndOrderAssigned() {
+        LocalDateTime now = LocalDateTime.now();
+        // catA: 2 chats
+        Chat a1 = new Chat(); a1.setDescription("catA"); a1.setCreatedAt(now.minusMinutes(2));
+        Chat a2 = new Chat(); a2.setDescription("catA"); a2.setCreatedAt(now.minusMinutes(1));
+        // catB: 3 chats
+        Chat b1 = new Chat(); b1.setDescription("catB"); b1.setCreatedAt(now.minusMinutes(5));
+        Chat b2 = new Chat(); b2.setDescription("catB"); b2.setCreatedAt(now.minusMinutes(4));
+        Chat b3 = new Chat(); b3.setDescription("catB"); b3.setCreatedAt(now.minusMinutes(3));
+        // catC: 1 chat
+        Chat c1 = new Chat(); c1.setDescription("catC"); c1.setCreatedAt(now);
+
+        when(chatRepository.findAll()).thenReturn(List.of(a1,a2,b1,b2,b3,c1));
+
+        var resp = controller.getPopularChatCategories();
+        assertEquals(200, resp.getStatusCodeValue());
+        var list = resp.getBody();
+        assertEquals(3, list.size());
+
+        // Expect order: catB (3), catA (2), catC (1)
+        Map<String,Object> top = list.get(0);
+        assertEquals("catB", top.get("name"));
+        assertEquals(3L, ((Long)top.get("queries")).longValue());
+        assertEquals(1, ((Integer)top.get("order")).intValue());
+
+        Map<String,Object> second = list.get(1);
+        assertEquals("catA", second.get("name"));
+        assertEquals(2L, ((Long)second.get("queries")).longValue());
+        assertEquals(2, ((Integer)second.get("order")).intValue());
+
+        Map<String,Object> third = list.get(2);
+        assertEquals("catC", third.get("name"));
+        assertEquals(1L, ((Long)third.get("queries")).longValue());
+        assertEquals(3, ((Integer)third.get("order")).intValue());
+
+        // Verify first/last timestamps are correct
+        assertEquals(now.minusMinutes(5), top.get("firstQuery"));
+        assertEquals(now.minusMinutes(3), top.get("lastQuery"));
+
+        assertEquals(now.minusMinutes(2), second.get("firstQuery"));
+        assertEquals(now.minusMinutes(1), second.get("lastQuery"));
+
+        assertEquals(now, third.get("firstQuery"));
+        assertEquals(now, third.get("lastQuery"));
+
+        verify(chatRepository).findAll();
+    }
 }
