@@ -347,4 +347,147 @@ class ForgotPasswordControllerTest {
         inOrder.verify(token).setUsed(true);
         inOrder.verify(passwordResetTokenRepository).save(token);
     }
+
+    @Test
+    void missingAnyField_thenReturnsBadRequest() {
+        // missing everything
+        ResponseEntity<String> r1 = controller.resetPassword(Map.of());
+        assertEquals(400, r1.getStatusCodeValue());
+        assertEquals("Email, OTP, and passwords are required.", r1.getBody());
+
+        // missing confirmPassword
+        ResponseEntity<String> r2 = controller.resetPassword(
+            Map.of("email","a@b.com","otp","123","password","P@ssw0rd"));
+        assertEquals(400, r2.getStatusCodeValue());
+        assertEquals("Email, OTP, and passwords are required.", r2.getBody());
+
+        verifyNoInteractions(userRepository, passwordResetTokenRepository, passwordEncoder);
+    }
+
+    @Test
+    void passwordsDoNotMatch_thenReturnsBadRequest() {
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","P@ssw0rd","confirmPassword","Different1!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("Passwords do not match.", resp.getBody());
+        verifyNoInteractions(userRepository, passwordResetTokenRepository, passwordEncoder);
+    }
+
+    @Test
+    void weakPassword_thenReturnsBadRequest() {
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","weak","confirmPassword","weak"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertTrue(resp.getBody().startsWith("Password must be at least 8 characters"));
+        verifyNoInteractions(userRepository, passwordResetTokenRepository, passwordEncoder);
+    }
+
+    @Test
+    void userNotFound_thenReturnsBadRequest() {
+        when(userRepository.findByEmail("nouser@x.com")).thenReturn(Optional.empty());
+        Map<String,String> body = Map.of(
+            "email","nouser@x.com","otp","123456",
+            "password","P@ssw0rd!","confirmPassword","P@ssw0rd!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("No account found with this email address.", resp.getBody());
+        verify(userRepository).findByEmail("nouser@x.com");
+        verifyNoMoreInteractions(userRepository);
+    }
+
+    @Test
+    void noTokenFound_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com")).thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.findByUser(user)).thenReturn(Optional.empty());
+
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","P@ssw0rd!","confirmPassword","P@ssw0rd!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("No OTP request found. Please request a password reset first.", resp.getBody());
+
+        verify(userRepository).findByEmail("u@x.com");
+        verify(passwordResetTokenRepository).findByUser(user);
+        verifyNoMoreInteractions(passwordResetTokenRepository);
+    }
+
+    @Test
+    void tokenExpired_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com")).thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        doReturn(true).when(token).isExpired();
+        when(passwordResetTokenRepository.findByUser(user)).thenReturn(Optional.of(token));
+
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","P@ssw0rd!","confirmPassword","P@ssw0rd!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("The OTP has expired. Please request a new one.", resp.getBody());
+
+        verify(passwordResetTokenRepository).findByUser(user);
+        verify(token).isExpired();
+    }
+
+    @Test
+    void tokenNotUsed_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com")).thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        doReturn(false).when(token).isExpired();
+        doReturn(false).when(token).isUsed();
+        when(passwordResetTokenRepository.findByUser(user)).thenReturn(Optional.of(token));
+
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","P@ssw0rd!","confirmPassword","P@ssw0rd!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("OTP verification required before resetting the password.", resp.getBody());
+
+        verify(token).isExpired();
+        verify(token).isUsed();
+    }
+
+    @Test
+    void validRequest_thenResetsPasswordAndDeletesToken() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com")).thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        doReturn(false).when(token).isExpired();
+        doReturn(true).when(token).isUsed();
+        when(passwordResetTokenRepository.findByUser(user)).thenReturn(Optional.of(token));
+
+        when(passwordEncoder.encode("P@ssw0rd!")).thenReturn("newHash");
+
+        Map<String,String> body = Map.of(
+            "email","u@x.com","otp","123456",
+            "password","P@ssw0rd!","confirmPassword","P@ssw0rd!"
+        );
+        ResponseEntity<String> resp = controller.resetPassword(body);
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("Password reset successfully.", resp.getBody());
+
+        // verify persistence actions
+        InOrder inOrder = inOrder(passwordEncoder, userRepository, passwordResetTokenRepository);
+        inOrder.verify(passwordEncoder).encode("P@ssw0rd!");
+        inOrder.verify(userRepository).save(user);
+        inOrder.verify(passwordResetTokenRepository).delete(token);
+    }
 }
