@@ -157,4 +157,112 @@ class LoginControllerTest {
         assertNotNull(auth);
         assertEquals(user, auth.getPrincipal());
     }
+
+    @Test
+    void missingCredentials_returnsBadRequest() {
+        LoginRequest creds = new LoginRequest("", "");
+        when(messages.getMessage(eq("login.required"), isNull(), any(Locale.class)))
+            .thenReturn("Credentials required");
+
+        ResponseEntity<?> resp = controller.loginAdmin(creds, request, response);
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("Credentials required", resp.getBody());
+        verify(messages).getMessage("login.required", null, request.getLocale());
+        verifyNoInteractions(userRepository, passwordEncoder, sessionRepository);
+    }
+
+    @Test
+    void unknownUser_returnsUnauthorized() {
+        LoginRequest creds = new LoginRequest("admin", "pw");
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.empty());
+        when(messages.getMessage(eq("login.invalid"), isNull(), any(Locale.class)))
+            .thenReturn("Invalid login");
+
+        ResponseEntity<?> resp = controller.loginAdmin(creds, request, response);
+
+        assertEquals(401, resp.getStatusCodeValue());
+        assertEquals("Invalid login", resp.getBody());
+        verify(userRepository).findByUsername("admin");
+        verify(messages).getMessage("login.invalid", null, request.getLocale());
+        verifyNoMoreInteractions(passwordEncoder, sessionRepository);
+    }
+
+    @Test
+    void nonAdminUser_returnsForbidden() {
+        LoginRequest creds = new LoginRequest("user", "pw");
+        User user = new User();
+        user.setUsername("user");
+        user.setCanLogin(true);
+        user.setIsAdmin(false);
+        when(userRepository.findByUsername("user")).thenReturn(Optional.of(user));
+        when(messages.getMessage(eq("login.admin.denied"), isNull(), any(Locale.class)))
+            .thenReturn("Admin access denied");
+
+        ResponseEntity<?> resp = controller.loginAdmin(creds, request, response);
+
+        assertEquals(403, resp.getStatusCodeValue());
+        assertEquals("Admin access denied", resp.getBody());
+        verify(userRepository).findByUsername("user");
+        verify(messages).getMessage("login.admin.denied", null, request.getLocale());
+        verifyNoInteractions(passwordEncoder, sessionRepository);
+    }
+
+    @Test
+    void wrongPassword_returnsUnauthorized() {
+        LoginRequest creds = new LoginRequest("admin", "wrong");
+        User user = new User();
+        user.setUsername("admin");
+        user.setCanLogin(true);
+        user.setIsAdmin(true);
+        user.setPasswordHash("hash");
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("wrong", "hash")).thenReturn(false);
+        when(messages.getMessage(eq("login.invalid"), isNull(), any(Locale.class)))
+            .thenReturn("Invalid login");
+
+        ResponseEntity<?> resp = controller.loginAdmin(creds, request, response);
+
+        assertEquals(401, resp.getStatusCodeValue());
+        assertEquals("Invalid login", resp.getBody());
+        verify(passwordEncoder).matches("wrong", "hash");
+        verify(messages).getMessage("login.invalid", null, request.getLocale());
+        verifyNoMoreInteractions(sessionRepository);
+    }
+
+    @Test
+    void validAdminLogin_createsSessionAndReturnsOk() {
+        LoginRequest creds = new LoginRequest("admin", "secret");
+        User user = new User();
+        user.setUsername("admin");
+        user.setCanLogin(true);
+        user.setIsAdmin(true);
+        user.setPasswordHash("hash");
+        when(userRepository.findByUsername("admin")).thenReturn(Optional.of(user));
+        when(passwordEncoder.matches("secret", "hash")).thenReturn(true);
+        when(messages.getMessage(eq("login.success.admin"), isNull(), any(Locale.class)))
+            .thenReturn("Welcome admin");
+
+        // capture the saved session
+        ArgumentCaptor<Session> captor = ArgumentCaptor.forClass(Session.class);
+        doAnswer(invocation -> {
+            Session s = invocation.getArgument(0);
+            assertNotNull(s.getSessionToken());
+            return null;
+        }).when(sessionRepository).save(captor.capture());
+
+        ResponseEntity<?> resp = controller.loginAdmin(creds, request, response);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        @SuppressWarnings("unchecked")
+        Map<String,String> body = (Map<String,String>)resp.getBody();
+        assertEquals("Welcome admin", body.get("message"));
+        String token = body.get("sessionToken");
+        assertEquals(token, captor.getValue().getSessionToken());
+
+        // SecurityContext set
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        assertNotNull(auth);
+        assertEquals(user, auth.getPrincipal());
+    }
 }
