@@ -80,6 +80,10 @@ public class Chat {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     // No setter for 'id' as it's auto-generated.
 
     public User getUser() {

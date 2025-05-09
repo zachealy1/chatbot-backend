@@ -75,6 +75,10 @@ public class Message {
         return id;
     }
 
+    public void setId(Long id) {
+        this.id = id;
+    }
+
     // No setter for 'id' as it's auto-generated.
 
     public Chat getChat() {
