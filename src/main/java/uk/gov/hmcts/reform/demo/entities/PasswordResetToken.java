@@ -1,6 +1,5 @@
 package uk.gov.hmcts.reform.demo.entities;
 
-
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
