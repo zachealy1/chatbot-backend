@@ -162,4 +162,6 @@ public class User implements UserDetails {  // Now implements UserDetails
     public boolean isEnabled() {
         return canLogin;
     }
+
+
 }
