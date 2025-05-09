@@ -95,7 +95,7 @@ public class ChatGptApi {
 
     // ------------------ Private Helper Methods ------------------
 
-    private String createThread() throws IOException {
+    String createThread() throws IOException {
         HttpURLConnection conn = openApiConnection("https://api.openai.com/v1/threads");
         conn.setRequestProperty("OpenAI-Beta", "assistants=v2");
         sendJsonRequest(conn, "{}");
@@ -225,7 +225,7 @@ public class ChatGptApi {
     }
 
 
-    private HttpURLConnection openApiConnection(String urlStr) throws IOException {
+    HttpURLConnection openApiConnection(String urlStr) throws IOException {
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("POST");
@@ -241,7 +241,7 @@ public class ChatGptApi {
         }
     }
 
-    private String readResponse(HttpURLConnection connection) throws IOException {
+    String readResponse(HttpURLConnection connection) throws IOException {
         int status = connection.getResponseCode();
         InputStream is = status >= 200 && status < 300
             ? connection.getInputStream()
