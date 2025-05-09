@@ -217,4 +217,44 @@ class AccountControllerTest {
         inOrder.verify(accountRequestRepository).save(req);
         inOrder.verifyNoMoreInteractions();
     }
+
+    @Test
+    void whenRequestNotFound_thenThrowsRuntimeException() {
+        Long reqId = 123L;
+        when(accountRequestRepository.findById(reqId)).thenReturn(Optional.empty());
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> {
+            controller.rejectAccountRequest(reqId);
+        });
+
+        assertEquals("Account request not found.", ex.getMessage());
+        verify(accountRequestRepository).findById(reqId);
+        verifyNoMoreInteractions(accountRequestRepository, userRepository);
+    }
+
+    @Test
+    void whenRequestFound_thenDeletesAndReturnsOk() {
+        // Arrange: build a request with a linked user
+        Long reqId = 456L;
+        User user = new User();
+        user.setId(99L);
+        AccountRequest req = new AccountRequest();
+        req.setId(reqId);
+        req.setUser(user);
+
+        when(accountRequestRepository.findById(reqId)).thenReturn(Optional.of(req));
+
+        // Act
+        ResponseEntity<String> resp = controller.rejectAccountRequest(reqId);
+
+        // Assert response
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("Account request rejected, and user has been deleted.", resp.getBody());
+
+        // Verify deletion order: first request, then user
+        InOrder inOrder = inOrder(accountRequestRepository, userRepository);
+        inOrder.verify(accountRequestRepository).delete(req);
+        inOrder.verify(userRepository).delete(user);
+        inOrder.verifyNoMoreInteractions();
+    }
 }
