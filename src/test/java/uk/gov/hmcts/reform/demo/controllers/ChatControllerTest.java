@@ -2,16 +2,19 @@ package uk.gov.hmcts.reform.demo.controllers;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -183,6 +186,91 @@ class ChatControllerTest {
         verify(chatService).buildOpenAiConversation(messages);
         verify(chatGptApi).chatGptWithAssistant(openAiMsgs, anyString());
         verify(chatService).saveMessage(chat, "chatbot", "response");
+    }
+
+    @Test
+    void whenChatNotFound_thenReturnsBadRequest() {
+        // Arrange
+        Long chatId = 42L;
+        when(chatService.findChatById(chatId)).thenReturn(null);
+
+        // Act
+        ResponseEntity<?> resp = controller.getMessagesForChat(chatId, new User());
+
+        // Assert
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertTrue(((Map<?,?>)resp.getBody()).containsKey("error"));
+        assertEquals("Chat not found.", ((Map<?,?>)resp.getBody()).get("error"));
+
+        verify(chatService).findChatById(chatId);
+        verifyNoMoreInteractions(chatService);
+    }
+
+    @Test
+    void getMessagesForChat_whenChatBelongsToOtherUser_thenReturnsForbidden() {
+        // Arrange
+        Long chatId = 100L;
+        User currentUser = new User();
+        currentUser.setId(1L);
+
+        User other = new User();
+        other.setId(2L);
+        Chat chat = new Chat();
+        chat.setId(chatId);
+        chat.setUser(other);
+
+        when(chatService.findChatById(chatId)).thenReturn(chat);
+
+        // Act
+        ResponseEntity<?> resp = controller.getMessagesForChat(chatId, currentUser);
+
+        // Assert
+        assertEquals(HttpStatus.FORBIDDEN, resp.getStatusCode());
+        assertEquals("You are not authorized to view these messages.",
+                     ((Map<?,?>)resp.getBody()).get("error"));
+
+        verify(chatService).findChatById(chatId);
+        verifyNoMoreInteractions(chatService);
+    }
+
+    @Test
+    void whenChatBelongsToUser_thenReturnsMessages() {
+        // Arrange
+        Long chatId = 7L;
+        User currentUser = new User();
+        currentUser.setId(5L);
+
+        Chat chat = new Chat();
+        chat.setId(chatId);
+        chat.setUser(currentUser);
+
+        Message m1 = new Message();
+        m1.setId(1L);
+        m1.setMessage("hello");
+        Message m2 = new Message();
+        m2.setId(2L);
+        m2.setMessage("world");
+        List<Message> messages = Arrays.asList(m1, m2);
+
+        when(chatService.findChatById(chatId)).thenReturn(chat);
+        when(chatService.getMessagesForChat(chat)).thenReturn(messages);
+
+        // Act
+        ResponseEntity<?> resp = controller.getMessagesForChat(chatId, currentUser);
+
+        // Assert
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        @SuppressWarnings("unchecked")
+        List<Message> body = (List<Message>) resp.getBody();
+        assertNotNull(body);
+        assertEquals(2, body.size());
+        assertSame(m1, body.get(0));
+        assertSame(m2, body.get(1));
+
+        InOrder inOrder = inOrder(chatService);
+        inOrder.verify(chatService).findChatById(chatId);
+        inOrder.verify(chatService).getMessagesForChat(chat);
+        inOrder.verifyNoMoreInteractions();
     }
 
 }
