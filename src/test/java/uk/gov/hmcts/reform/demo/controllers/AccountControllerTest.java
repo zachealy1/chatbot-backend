@@ -3,6 +3,7 @@ package uk.gov.hmcts.reform.demo.controllers;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import uk.gov.hmcts.reform.demo.dto.AccountSummary;
+import uk.gov.hmcts.reform.demo.dto.PendingRequestSummary;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
@@ -332,5 +334,76 @@ class AccountControllerTest {
         // Verify repository interaction
         verify(userRepository).findAll();
         verifyNoMoreInteractions(userRepository);
+    }
+
+    @Test
+    void whenThereArePendingRequests_thenReturnSummaries() {
+        // Arrange
+        User user1 = new User();
+        user1.setUsername("alice");
+        user1.setEmail("alice@example.com");
+        AccountRequest r1 = new AccountRequest();
+        r1.setId(1L);
+        r1.setUser(user1);
+        r1.setStatus(AccountRequest.Status.PENDING);
+        LocalDateTime t1 = LocalDateTime.of(2023,5,1,14,0);
+        r1.setRequestedAt(t1);
+
+        User user2 = new User();
+        user2.setUsername("bob");
+        user2.setEmail("bob@example.com");
+        AccountRequest r2 = new AccountRequest();
+        r2.setId(2L);
+        r2.setUser(user2);
+        r2.setStatus(AccountRequest.Status.PENDING);
+        LocalDateTime t2 = LocalDateTime.of(2023,5,2,15,30);
+        r2.setRequestedAt(t2);
+
+        when(accountRequestRepository.findByStatus(AccountRequest.Status.PENDING))
+            .thenReturn(Arrays.asList(r1, r2));
+
+        // Act
+        ResponseEntity<List<PendingRequestSummary>> resp = controller.getPendingAccountRequests();
+
+        // Assert
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        List<PendingRequestSummary> summaries = resp.getBody();
+        assertNotNull(summaries);
+        assertEquals(2, summaries.size());
+
+        PendingRequestSummary s1 = summaries.get(0);
+        assertEquals(1L, s1.getRequestId());
+        assertEquals("alice", s1.getUserName());
+        assertEquals("alice@example.com", s1.getEmail());
+        assertEquals("PENDING", s1.getStatus());
+        assertEquals(t1, s1.getSubmittedDate());
+
+        PendingRequestSummary s2 = summaries.get(1);
+        assertEquals(2L, s2.getRequestId());
+        assertEquals("bob", s2.getUserName());
+        assertEquals("bob@example.com", s2.getEmail());
+        assertEquals("PENDING", s2.getStatus());
+        assertEquals(t2, s2.getSubmittedDate());
+
+        verify(accountRequestRepository).findByStatus(AccountRequest.Status.PENDING);
+        verifyNoMoreInteractions(accountRequestRepository);
+    }
+
+    @Test
+    void whenNoPendingRequests_thenReturnEmptyList() {
+        // Arrange
+        when(accountRequestRepository.findByStatus(AccountRequest.Status.PENDING))
+            .thenReturn(Collections.emptyList());
+
+        // Act
+        ResponseEntity<List<PendingRequestSummary>> resp = controller.getPendingAccountRequests();
+
+        // Assert
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertNotNull(resp.getBody());
+        assertTrue(resp.getBody().isEmpty());
+
+        verify(accountRequestRepository).findByStatus(AccountRequest.Status.PENDING);
+        verifyNoMoreInteractions(accountRequestRepository);
     }
 }

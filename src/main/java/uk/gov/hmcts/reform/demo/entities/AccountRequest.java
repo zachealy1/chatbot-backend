@@ -32,7 +32,7 @@ public class AccountRequest {
     private boolean approved = false; // Default false until admin approves
 
     @Column(nullable = false, updatable = false)
-    private final LocalDateTime requestedAt = LocalDateTime.now(); // Timestamp when request is made
+    private LocalDateTime requestedAt = LocalDateTime.now(); // Timestamp when request is made
 
     @Column
     private LocalDateTime approvedAt; // Null until request is approved
@@ -96,6 +96,10 @@ public class AccountRequest {
 
     public LocalDateTime getRequestedAt() {
         return requestedAt;
+    }
+
+    public void setRequestedAt(LocalDateTime requestedAt) {
+        this.requestedAt = requestedAt;
     }
 
     public LocalDateTime getApprovedAt() {
