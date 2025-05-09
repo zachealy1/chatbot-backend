@@ -2,6 +2,7 @@ package uk.gov.hmcts.reform.demo.controllers;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
@@ -129,30 +130,37 @@ class ChatControllerTest {
         newChat.setId(10L);
         newChat.setUser(user);
 
+        // stub the categorization and chat creation
         when(chatGptApi.categorise(message)).thenReturn(summary);
         when(chatService.createChat(user, summary)).thenReturn(newChat);
-        // No existing messages
+
+        // no prior messages in this new chat
         when(chatService.getMessagesForChat(newChat)).thenReturn(Collections.emptyList());
         when(chatService.buildOpenAiConversation(Collections.emptyList()))
             .thenReturn(Collections.emptyList());
-        when(chatGptApi.chatGptWithAssistant(Collections.emptyList(), anyString()))
+
+        // both arguments must be matchers: use eq(...) for the raw list
+        when(chatGptApi.chatGptWithAssistant(eq(Collections.emptyList()), anyString()))
             .thenReturn("bot reply");
 
-        ResponseEntity<Map<String, Object>> response = controller.chat(user, Map.of("message", message));
+        // call the controller
+        ResponseEntity<Map<String, Object>> response =
+            controller.chat(user, Map.of("message", message));
 
+        // verify response
         assertEquals(HttpStatus.OK, response.getStatusCode());
         Map<String, Object> body = response.getBody();
         assertNotNull(body);
         assertEquals(10L, body.get("chatId"));
         assertEquals("bot reply", body.get("message"));
 
-        // Verify flow
+        // verify the interaction flow
         verify(chatGptApi).categorise(message);
         verify(chatService).createChat(user, summary);
         verify(chatService).saveMessage(newChat, "user", message);
         verify(chatService).getMessagesForChat(newChat);
         verify(chatService).buildOpenAiConversation(Collections.emptyList());
-        verify(chatGptApi).chatGptWithAssistant(Collections.emptyList(), anyString());
+        verify(chatGptApi).chatGptWithAssistant(eq(Collections.emptyList()), anyString());
         verify(chatService).saveMessage(newChat, "chatbot", "bot reply");
     }
 
@@ -176,9 +184,13 @@ class ChatControllerTest {
         when(chatService.findChatById(20L)).thenReturn(chat);
         when(chatService.getMessagesForChat(chat)).thenReturn(messages);
         when(chatService.buildOpenAiConversation(messages)).thenReturn(openAiMsgs);
-        when(chatGptApi.chatGptWithAssistant(openAiMsgs, anyString())).thenReturn("response");
+        // Use eq(...) so both args are matchers
+        when(chatGptApi.chatGptWithAssistant(eq(openAiMsgs), anyString()))
+            .thenReturn("response");
 
-        Map<String, Object> result = controller.chat(user, Map.of("message", "new", "chatId", "20")).getBody();
+        Map<String, Object> result = controller
+            .chat(user, Map.of("message", "new", "chatId", "20"))
+            .getBody();
 
         assertNotNull(result);
         assertEquals(20L, result.get("chatId"));
@@ -187,7 +199,7 @@ class ChatControllerTest {
         verify(chatService).saveMessage(chat, "user", "new");
         verify(chatService).getMessagesForChat(chat);
         verify(chatService).buildOpenAiConversation(messages);
-        verify(chatGptApi).chatGptWithAssistant(openAiMsgs, anyString());
+        verify(chatGptApi).chatGptWithAssistant(eq(openAiMsgs), anyString());
         verify(chatService).saveMessage(chat, "chatbot", "response");
     }
 
