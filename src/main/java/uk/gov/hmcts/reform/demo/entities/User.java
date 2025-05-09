@@ -17,6 +17,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 @Entity
 @Table(name = "users")
 public class User implements UserDetails {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -131,6 +132,4 @@ public class User implements UserDetails {
     public void setCreatedAt(LocalDate createdAt) {
         this.createdAt = createdAt;
     }
-
-
 }
