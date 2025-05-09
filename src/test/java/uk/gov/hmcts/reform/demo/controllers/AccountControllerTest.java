@@ -406,4 +406,67 @@ class AccountControllerTest {
         verify(accountRequestRepository).findByStatus(AccountRequest.Status.PENDING);
         verifyNoMoreInteractions(accountRequestRepository);
     }
+
+    @Test
+    void whenUserNotFound_thenReturnsBadRequest() {
+        Long userId = 1L;
+        when(userRepository.findById(userId)).thenReturn(Optional.empty());
+
+        ResponseEntity<String> resp = controller.deleteAccount(userId);
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("User not found.", resp.getBody());
+
+        verify(userRepository).findById(userId);
+        verifyNoMoreInteractions(userRepository, accountRequestRepository);
+    }
+
+    @Test
+    void whenNoAssociatedRequest_thenDeletesUserOnly() {
+        Long userId = 2L;
+        User user = new User();
+        user.setId(userId);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(accountRequestRepository.findByUser(user)).thenReturn(Optional.empty());
+
+        ResponseEntity<String> resp = controller.deleteAccount(userId);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("User account deleted successfully.", resp.getBody());
+
+        InOrder inOrder = inOrder(accountRequestRepository, userRepository);
+        // should check for associated request first
+        inOrder.verify(accountRequestRepository).findByUser(user);
+        // then delete only the user
+        inOrder.verify(userRepository).delete(user);
+        inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void whenAssociatedRequestExists_thenDeletesRequestThenUser() {
+        Long userId = 3L;
+        User user = new User();
+        user.setId(userId);
+        AccountRequest req = new AccountRequest();
+        req.setId(10L);
+        req.setUser(user);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(accountRequestRepository.findByUser(user)).thenReturn(Optional.of(req));
+
+        ResponseEntity<String> resp = controller.deleteAccount(userId);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("User account deleted successfully.", resp.getBody());
+
+        InOrder inOrder = inOrder(accountRequestRepository, userRepository);
+        // first find associated request
+        inOrder.verify(accountRequestRepository).findByUser(user);
+        // then delete the request
+        inOrder.verify(accountRequestRepository).delete(req);
+        // then delete the user
+        inOrder.verify(userRepository).delete(user);
+        inOrder.verifyNoMoreInteractions();
+    }
 }
