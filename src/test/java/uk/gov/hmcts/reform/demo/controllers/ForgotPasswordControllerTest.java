@@ -3,6 +3,9 @@ package uk.gov.hmcts.reform.demo.controllers;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -15,6 +18,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -213,5 +217,134 @@ class ForgotPasswordControllerTest {
         assertTrue(Pattern.matches("\\d{6}", rawOtp));
 
         verify(emailService).sendPasswordResetEmail("again@example.com", rawOtp);
+    }
+
+    @Test
+    void whenEmailOrOtpMissing_thenReturnsBadRequest() {
+        // both missing
+        ResponseEntity<String> r1 = controller.verifyOtp(Map.of());
+        assertEquals(400, r1.getStatusCodeValue());
+        assertEquals("Email and OTP are required.", r1.getBody());
+
+        // otp missing
+        ResponseEntity<String> r2 = controller.verifyOtp(Map.of("email", "a@b.com"));
+        assertEquals(400, r2.getStatusCodeValue());
+        assertEquals("Email and OTP are required.", r2.getBody());
+
+        // email missing
+        ResponseEntity<String> r3 = controller.verifyOtp(Map.of("otp", "123456"));
+        assertEquals(400, r3.getStatusCodeValue());
+        assertEquals("Email and OTP are required.", r3.getBody());
+
+        verifyNoInteractions(userRepository, passwordResetTokenRepository, passwordEncoder);
+    }
+
+    @Test
+    void verifyOtp_whenEmailNotFound_thenReturnsBadRequest() {
+        when(userRepository.findByEmail("missing@x.com"))
+            .thenReturn(Optional.empty());
+
+        ResponseEntity<String> resp = controller.verifyOtp(
+            Map.of("email", "missing@x.com", "otp", "123456"));
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("No account found with this email address.", resp.getBody());
+
+        verify(userRepository).findByEmail("missing@x.com");
+        verifyNoMoreInteractions(userRepository);
+        verifyNoInteractions(passwordResetTokenRepository, passwordEncoder);
+    }
+
+    @Test
+    void whenNoTokenFound_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com"))
+            .thenReturn(Optional.of(user));
+        when(passwordResetTokenRepository.findByUser(user))
+            .thenReturn(Optional.empty());
+
+        ResponseEntity<String> resp = controller.verifyOtp(
+            Map.of("email", "u@x.com", "otp", "123456"));
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("No OTP request found. Please request a password reset first.", resp.getBody());
+
+        verify(userRepository).findByEmail("u@x.com");
+        verify(passwordResetTokenRepository).findByUser(user);
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void whenTokenExpired_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com"))
+            .thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        // force expired
+        doReturn(true).when(token).isExpired();
+
+        when(passwordResetTokenRepository.findByUser(user))
+            .thenReturn(Optional.of(token));
+
+        ResponseEntity<String> resp = controller.verifyOtp(
+            Map.of("email", "u@x.com", "otp", "123456"));
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("The OTP has expired. Please request a new one.", resp.getBody());
+
+        verify(passwordResetTokenRepository).findByUser(user);
+        verify(token).isExpired();
+        verifyNoInteractions(passwordEncoder);
+    }
+
+    @Test
+    void whenOtpDoesNotMatch_thenReturnsBadRequest() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com"))
+            .thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        doReturn(false).when(token).isExpired();
+        when(passwordResetTokenRepository.findByUser(user))
+            .thenReturn(Optional.of(token));
+
+        when(passwordEncoder.matches("wrong", "hash"))
+            .thenReturn(false);
+
+        ResponseEntity<String> resp = controller.verifyOtp(
+            Map.of("email", "u@x.com", "otp", "wrong"));
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("The one-time password is incorrect. Please try again.", resp.getBody());
+
+        verify(passwordResetTokenRepository).findByUser(user);
+        verify(token).isExpired();
+        verify(passwordEncoder).matches("wrong", "hash");
+    }
+
+    @Test
+    void whenValidOtp_thenMarksUsedAndReturnsOk() {
+        User user = new User();
+        when(userRepository.findByEmail("u@x.com"))
+            .thenReturn(Optional.of(user));
+
+        PasswordResetToken token = spy(new PasswordResetToken(user, "hash"));
+        doReturn(false).when(token).isExpired();
+        when(passwordResetTokenRepository.findByUser(user))
+            .thenReturn(Optional.of(token));
+
+        when(passwordEncoder.matches("123456", "hash"))
+            .thenReturn(true);
+
+        ResponseEntity<String> resp = controller.verifyOtp(
+            Map.of("email", "u@x.com", "otp", "123456"));
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("OTP verified successfully. Proceed to reset your password.", resp.getBody());
+
+        InOrder inOrder = inOrder(token, passwordResetTokenRepository);
+        inOrder.verify(token).setUsed(true);
+        inOrder.verify(passwordResetTokenRepository).save(token);
     }
 }
