@@ -608,4 +608,34 @@ class AccountControllerTest {
         verify(controller).validateAndUpdatePassword("pw1","pw1",stored);
         verify(userRepository).save(stored);
     }
+
+    @Test
+    void whenCurrentUserIsNull_thenReturnsUnauthorized() {
+        // Act
+        ResponseEntity<String> response = controller.getUsername(null);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("User not authenticated", response.getBody());
+
+        // No repository interactions should occur
+        verifyNoInteractions(userRepository, accountRequestRepository);
+    }
+
+    @Test
+    void whenCurrentUserIsPresent_thenReturnsUsername() {
+        // Arrange
+        User currentUser = new User();
+        currentUser.setUsername("alice");
+
+        // Act
+        ResponseEntity<String> response = controller.getUsername(currentUser);
+
+        // Assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("alice", response.getBody());
+
+        // No repository interactions should occur
+        verifyNoInteractions(userRepository, accountRequestRepository);
+    }
 }
