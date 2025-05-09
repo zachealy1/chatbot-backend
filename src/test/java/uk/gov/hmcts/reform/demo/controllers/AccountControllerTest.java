@@ -85,4 +85,46 @@ class AccountControllerTest {
         verify(userRepository).save(any());
         verify(accountRequestRepository).save(any());
     }
+
+    @Test
+    void whenInvalidDateAdmin_thenReturnsBadRequest() {
+        Map<String, String> adminDetails = new HashMap<>();
+        adminDetails.put("username", "admin");
+        adminDetails.put("email", "admin@example.com");
+        adminDetails.put("password", "pw");
+        adminDetails.put("confirmPassword", "pw");
+        adminDetails.put("dateOfBirth", "bad-date");
+
+        when(messages.getMessage(eq("error.invalid.date"), isNull(), eq(Locale.ENGLISH)))
+            .thenReturn("Invalid admin date");
+
+        ResponseEntity<String> resp = controller.registerAdmin(adminDetails);
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("Invalid admin date", resp.getBody());
+        verify(messages).getMessage("error.invalid.date", null, Locale.ENGLISH);
+    }
+
+    @Test
+    void whenAllValidAdmin_thenPersistsAndReturnsOkAdmin() {
+        Map<String, String> adminDetails = new HashMap<>();
+        adminDetails.put("username", "adminUser");
+        adminDetails.put("email", "admin@example.com");
+        adminDetails.put("password", "secret");
+        adminDetails.put("confirmPassword", "secret");
+        adminDetails.put("dateOfBirth", "1980-12-31");
+
+        when(passwordEncoder.encode("secret")).thenReturn("encodedSecret");
+        when(messages.getMessage(eq("success.admin.registered"), isNull(), eq(Locale.ENGLISH)))
+            .thenReturn("Admin registration successful");
+
+        ResponseEntity<String> resp = controller.registerAdmin(adminDetails);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("Admin registration successful", resp.getBody());
+
+        // Should have created & saved both User and AccountRequest
+        verify(userRepository).save(any());
+        verify(accountRequestRepository).save(any());
+    }
 }
