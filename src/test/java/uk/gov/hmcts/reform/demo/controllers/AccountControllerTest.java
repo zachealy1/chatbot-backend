@@ -638,4 +638,149 @@ class AccountControllerTest {
         // No repository interactions should occur
         verifyNoInteractions(userRepository, accountRequestRepository);
     }
+
+    @Test
+    void getEmail_whenCurrentUserIsNull_thenReturnsUnauthorized() {
+        // Act
+        ResponseEntity<String> response = controller.getEmail(null);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("User not authenticated", response.getBody());
+
+        verifyNoInteractions(userRepository, accountRequestRepository);
+    }
+
+    @Test
+    void whenCurrentUserIsPresent_thenReturnsEmail() {
+        // Arrange
+        User currentUser = new User();
+        currentUser.setEmail("alice@example.com");
+
+        // Act
+        ResponseEntity<String> response = controller.getEmail(currentUser);
+
+        // Assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("alice@example.com", response.getBody());
+
+        verifyNoInteractions(userRepository, accountRequestRepository);
+    }
+
+    @Test
+    void getDateOfBirthDay_whenCurrentUserIsNull_thenReturnsUnauthorized() {
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthDay(null);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void whenCurrentUserDobIsNull_thenReturnsUnauthorized() {
+        // Arrange
+        User user = new User();
+        user.setDateOfBirth(null);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthDay(user);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void whenDobPresent_thenReturnsDayOfMonth() {
+        // Arrange
+        User user = new User();
+        LocalDate dob = LocalDate.of(1990, 12, 25);
+        user.setDateOfBirth(dob);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthDay(user);
+
+        // Assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(25, response.getBody());
+    }
+
+    @Test
+    void getDateOfBirthMonth_whenCurrentUserIsNull_thenReturnsUnauthorized() {
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthMonth(null);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void getDateOfBirthMonth_whenCurrentUserDobIsNull_thenReturnsUnauthorized() {
+        // Arrange
+        User user = new User();
+        user.setDateOfBirth(null);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthMonth(user);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void whenDobPresent_thenReturnsMonthValue() {
+        // Arrange
+        User user = new User();
+        LocalDate dob = LocalDate.of(1990, 12, 25);
+        user.setDateOfBirth(dob);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthMonth(user);
+
+        // Assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(12, response.getBody());
+    }
+
+    @Test
+    void getDateOfBirthYear_whenCurrentUserIsNull_thenReturnsUnauthorized() {
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthYear(null);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void getDateOfBirthYear_whenCurrentUserDobIsNull_thenReturnsUnauthorized() {
+        // Arrange
+        User user = new User();
+        user.setDateOfBirth(null);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthYear(user);
+
+        // Assert
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertNull(response.getBody());
+    }
+
+    @Test
+    void whenDobPresent_thenReturnsYearValue() {
+        // Arrange
+        User user = new User();
+        LocalDate dob = LocalDate.of(1985, 7, 20);
+        user.setDateOfBirth(dob);
+
+        // Act
+        ResponseEntity<Integer> response = controller.getDateOfBirthYear(user);
+
+        // Assert
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1985, response.getBody());
+    }
 }
