@@ -2,6 +2,7 @@ package uk.gov.hmcts.reform.demo.controllers;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -373,6 +374,100 @@ class ChatControllerTest {
         assertNull(body.get(0).get("createdAt"));
 
         verify(chatService).getChatsForUser(user);
+    }
+
+    @Test
+    void deleteChat_whenCurrentUserIsNull_thenReturnsBadRequest() {
+        ResponseEntity<?> resp = controller.deleteChat(1L, null);
+
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals("User not authenticated.", ((Map<?,?>)resp.getBody()).get("error"));
+        verifyNoInteractions(chatService);
+    }
+
+    @Test
+    void deleteChat_whenChatNotFound_thenReturnsBadRequest() {
+        User user = new User();
+        user.setId(10L);
+        when(chatService.findChatById(5L)).thenReturn(null);
+
+        ResponseEntity<?> resp = controller.deleteChat(5L, user);
+
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals("Chat not found.", ((Map<?,?>)resp.getBody()).get("error"));
+        verify(chatService).findChatById(5L);
+        verifyNoMoreInteractions(chatService);
+    }
+
+    @Test
+    void deleteChat_whenChatBelongsToOtherUser_thenReturnsForbidden() {
+        User user = new User();
+        user.setId(1L);
+
+        User owner = new User();
+        owner.setId(2L);
+        Chat chat = new Chat();
+        chat.setId(7L);
+        chat.setUser(owner);
+
+        when(chatService.findChatById(7L)).thenReturn(chat);
+
+        ResponseEntity<?> resp = controller.deleteChat(7L, user);
+
+        assertEquals(HttpStatus.FORBIDDEN, resp.getStatusCode());
+        assertEquals("You are not authorized to delete this chat.",
+                     ((Map<?,?>)resp.getBody()).get("error"));
+
+        verify(chatService).findChatById(7L);
+        verifyNoMoreInteractions(chatService);
+    }
+
+    @Test
+    void whenDeleteSucceeds_thenReturnsOk() {
+        User user = new User();
+        user.setId(3L);
+
+        Chat chat = new Chat();
+        chat.setId(8L);
+        chat.setUser(user);
+
+        when(chatService.findChatById(8L)).thenReturn(chat);
+        // deleteChat does not throw
+
+        ResponseEntity<?> resp = controller.deleteChat(8L, user);
+
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        assertEquals("Chat deleted successfully.",
+                     ((Map<?,?>)resp.getBody()).get("message"));
+
+        InOrder inOrder = inOrder(chatService);
+        inOrder.verify(chatService).findChatById(8L);
+        inOrder.verify(chatService).deleteChat(chat);
+        inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void whenDeleteThrows_thenReturnsBadRequest() {
+        User user = new User();
+        user.setId(4L);
+
+        Chat chat = new Chat();
+        chat.setId(9L);
+        chat.setUser(user);
+
+        when(chatService.findChatById(9L)).thenReturn(chat);
+        doThrow(new RuntimeException("db error")).when(chatService).deleteChat(chat);
+
+        ResponseEntity<?> resp = controller.deleteChat(9L, user);
+
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals("Unable to delete chat.",
+                     ((Map<?,?>)resp.getBody()).get("error"));
+
+        InOrder inOrder = inOrder(chatService);
+        inOrder.verify(chatService).findChatById(9L);
+        inOrder.verify(chatService).deleteChat(chat);
+        inOrder.verifyNoMoreInteractions();
     }
 
 }
