@@ -1,14 +1,19 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.context.MessageSource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.context.i18n.LocaleContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import uk.gov.hmcts.reform.demo.dto.AccountSummary;
 import uk.gov.hmcts.reform.demo.entities.AccountRequest;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.UserRepository;
@@ -256,5 +261,76 @@ class AccountControllerTest {
         inOrder.verify(accountRequestRepository).delete(req);
         inOrder.verify(userRepository).delete(user);
         inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void whenCurrentUserIsNull_thenReturnsForbidden() {
+        ResponseEntity<List<AccountSummary>> resp = controller.listAllAccounts(null);
+        assertEquals(HttpStatus.FORBIDDEN, resp.getStatusCode());
+        assertNull(resp.getBody());
+    }
+
+    @Test
+    void whenCurrentUserIsNotAdmin_thenReturnsForbidden() {
+        User nonAdmin = new User();
+        nonAdmin.setIsAdmin(false);
+        ResponseEntity<List<AccountSummary>> resp = controller.listAllAccounts(nonAdmin);
+        assertEquals(HttpStatus.FORBIDDEN, resp.getStatusCode());
+        assertNull(resp.getBody());
+    }
+
+    @Test
+    void whenCurrentUserIsAdmin_thenReturnsSummaries() {
+        // Arrange
+        User adminUser = new User();
+        adminUser.setIsAdmin(true);
+
+        // Create two test users
+        User u1 = new User();
+        u1.setId(1L);
+        u1.setUsername("alice");
+        u1.setEmail("alice@example.com");
+        u1.setIsAdmin(false);
+        LocalDate t1 = LocalDate.of(2020, 1, 1);
+        u1.setCreatedAt(t1);
+
+        User u2 = new User();
+        u2.setId(2L);
+        u2.setUsername("bob");
+        u2.setEmail("bob@example.com");
+        u2.setIsAdmin(true);
+        LocalDate t2 = LocalDate.of(2021, 2, 2);
+        u2.setCreatedAt(t2);
+
+        when(userRepository.findAll()).thenReturn(Arrays.asList(u1, u2));
+
+        // Act
+        ResponseEntity<List<AccountSummary>> resp = controller.listAllAccounts(adminUser);
+
+        // Assert status
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        List<AccountSummary> summaries = resp.getBody();
+        assertNotNull(summaries);
+        assertEquals(2, summaries.size());
+
+        // Verify first summary (regular user)
+        AccountSummary s1 = summaries.get(0);
+        assertEquals(1L, s1.getAccountId());
+        assertEquals("alice", s1.getUsername());
+        assertEquals("alice@example.com", s1.getEmail());
+        assertEquals("User", s1.getRole());
+        assertEquals(t1, s1.getCreatedDate());
+
+        // Verify second summary (admin)
+        AccountSummary s2 = summaries.get(1);
+        assertEquals(2L, s2.getAccountId());
+        assertEquals("bob", s2.getUsername());
+        assertEquals("bob@example.com", s2.getEmail());
+        assertEquals("Admin", s2.getRole());
+        assertEquals(t2, s2.getCreatedDate());
+
+        // Verify repository interaction
+        verify(userRepository).findAll();
+        verifyNoMoreInteractions(userRepository);
     }
 }

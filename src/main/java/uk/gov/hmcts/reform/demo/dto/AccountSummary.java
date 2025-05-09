@@ -4,11 +4,11 @@ import java.time.LocalDate;
 
 public class AccountSummary {
 
-    private final Long accountId;
-    private final String username;
-    private final String email;
-    private final String role;
-    private final LocalDate createdDate;
+    private Long accountId;
+    private String username;
+    private String email;
+    private String role;
+    private LocalDate createdDate;
 
     public AccountSummary(Long accountId,
                           String username,
@@ -40,5 +40,25 @@ public class AccountSummary {
 
     public LocalDate getCreatedDate() {
         return createdDate;
+    }
+
+    public void setAccountId(Long accountId) {
+        this.accountId = accountId;
+    }
+
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
+    }
+
+    public void setCreatedDate(LocalDate createdDate) {
+        this.createdDate = createdDate;
     }
 }

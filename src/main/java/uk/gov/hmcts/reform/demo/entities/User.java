@@ -163,5 +163,15 @@ public class User implements UserDetails {  // Now implements UserDetails
         return canLogin;
     }
 
+    public Boolean getAdmin() {
+        return isAdmin;
+    }
 
+    public void setAdmin(Boolean admin) {
+        isAdmin = admin;
+    }
+
+    public void setCreatedAt(LocalDate createdAt) {
+        this.createdAt = createdAt;
+    }
 }
