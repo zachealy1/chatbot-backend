@@ -1,10 +1,12 @@
 package uk.gov.hmcts.reform.demo.controllers;
 
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.*;
 import org.springframework.http.ResponseEntity;
 import uk.gov.hmcts.reform.demo.dto.SessionActivity;
+import uk.gov.hmcts.reform.demo.entities.Chat;
 import uk.gov.hmcts.reform.demo.entities.Session;
 import uk.gov.hmcts.reform.demo.entities.User;
 import uk.gov.hmcts.reform.demo.repositories.ChatRepository;
@@ -121,4 +123,55 @@ class StatisticsControllerTest {
         assertEquals(now4,  activities.get(3).getCreatedAt());
         assertEquals("51 and over", activities.get(3).getAgeGroup());
     }
+
+    @Test
+    void getChatCategoryBreakdown_calculatesPercentagesPerAgeBucket() {
+        LocalDate today = LocalDate.now();
+
+        // Create users in different age groups:
+        User u25 = new User(); u25.setId(1L);
+        u25.setDateOfBirth(today.minusYears(25));
+        User u35 = new User(); u35.setId(2L);
+        u35.setDateOfBirth(today.minusYears(35));
+        User u45 = new User(); u45.setId(3L);
+        u45.setDateOfBirth(today.minusYears(45));
+
+        when(userRepository.findAll()).thenReturn(List.of(u25, u35, u45));
+
+        // Create chats: two in "catA" by u25 & u35, one in "catB" by u45
+        Chat c1 = new Chat(); c1.setDescription("catA"); c1.setUser(u25); c1.setCreatedAt(LocalDateTime.now());
+        Chat c2 = new Chat(); c2.setDescription("catA"); c2.setUser(u35); c2.setCreatedAt(LocalDateTime.now().plusMinutes(1));
+        Chat c3 = new Chat(); c3.setDescription("catB"); c3.setUser(u45); c3.setCreatedAt(LocalDateTime.now().plusMinutes(2));
+
+        when(chatRepository.findAll()).thenReturn(List.of(c1, c2, c3));
+
+        // Act
+        ResponseEntity<Map<String, Map<String, Double>>> resp = controller.getChatCategoryBreakdown();
+        assertEquals(200, resp.getStatusCodeValue());
+        Map<String, Map<String, Double>> breakdown = resp.getBody();
+        assertNotNull(breakdown);
+
+        // We expect two categories: "catA" then "catB"
+        assertTrue(breakdown.containsKey("catA"));
+        assertTrue(breakdown.containsKey("catB"));
+
+        // For catA: 2 users interacted, one in 20-30 and one in 31-40 => each 50%, others 0%
+        Map<String, Double> pctA = breakdown.get("catA");
+        assertEquals(50.0, pctA.get("20-30"), 0.0001);
+        assertEquals(50.0, pctA.get("31-40"), 0.0001);
+        assertEquals(0.0, pctA.get("41-50"), 0.0001);
+        assertEquals(0.0, pctA.get("51+"),   0.0001);
+
+        // For catB: only u45 interacted => 100% in 41-50, others 0%
+        Map<String, Double> pctB = breakdown.get("catB");
+        assertEquals(0.0,  pctB.get("20-30"), 0.0001);
+        assertEquals(0.0,  pctB.get("31-40"), 0.0001);
+        assertEquals(100.0, pctB.get("41-50"), 0.0001);
+        assertEquals(0.0,  pctB.get("51+"),   0.0001);
+
+        // Verify repository calls
+        verify(userRepository).findAll();
+        verify(chatRepository).findAll();
+    }
+
 }
