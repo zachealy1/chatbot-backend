@@ -236,9 +236,11 @@ class AccountControllerTest {
         Long reqId = 123L;
         when(accountRequestRepository.findById(reqId)).thenReturn(Optional.empty());
 
-        RuntimeException ex = assertThrows(RuntimeException.class, () -> {
-            controller.rejectAccountRequest(reqId);
-        });
+        RuntimeException ex = assertThrows(
+            RuntimeException.class, () -> {
+                controller.rejectAccountRequest(reqId);
+            }
+        );
 
         assertEquals("Account request not found.", ex.getMessage());
         verify(accountRequestRepository).findById(reqId);
@@ -352,7 +354,7 @@ class AccountControllerTest {
         r1.setId(1L);
         r1.setUser(user1);
         r1.setStatus(AccountRequest.Status.PENDING);
-        LocalDateTime t1 = LocalDateTime.of(2023,5,1,14,0);
+        LocalDateTime t1 = LocalDateTime.of(2023, 5, 1, 14, 0);
         r1.setRequestedAt(t1);
 
         User user2 = new User();
@@ -362,7 +364,7 @@ class AccountControllerTest {
         r2.setId(2L);
         r2.setUser(user2);
         r2.setStatus(AccountRequest.Status.PENDING);
-        LocalDateTime t2 = LocalDateTime.of(2023,5,2,15,30);
+        LocalDateTime t2 = LocalDateTime.of(2023, 5, 2, 15, 30);
         r2.setRequestedAt(t2);
 
         when(accountRequestRepository.findByStatus(AccountRequest.Status.PENDING))
@@ -519,7 +521,7 @@ class AccountControllerTest {
             .when(controller)
             .validateUserDetails(anyString(), anyString(), anyString());
 
-        Map<String,String> body = Map.of(
+        Map<String, String> body = Map.of(
             "username", "foo",
             "email", "bar",
             "dateOfBirth", "2000-01-01"
@@ -551,7 +553,7 @@ class AccountControllerTest {
         doReturn(null).when(controller).validateAndUpdateDateOfBirth(anyString(), eq(stored));
         // note: no password in map → skip password branch
 
-        Map<String,String> body = new HashMap<>();
+        Map<String, String> body = new HashMap<>();
         body.put("username", "newuser");
         body.put("email", "new@example.com");
         body.put("dateOfBirth", "2000-01-01");
@@ -589,7 +591,7 @@ class AccountControllerTest {
         // stub password-update to succeed
         doReturn(null).when(controller).validateAndUpdatePassword(eq("pw1"), eq("pw1"), eq(stored));
 
-        Map<String,String> body = new HashMap<>();
+        Map<String, String> body = new HashMap<>();
         body.put("username", "u3");
         body.put("email", "e3@example.com");
         body.put("dateOfBirth", "1995-05-05");
@@ -605,7 +607,7 @@ class AccountControllerTest {
         assertEquals("Account updated successfully.", resp.getBody());
 
         // Verify the private validateAndUpdatePassword was invoked
-        verify(controller).validateAndUpdatePassword("pw1","pw1",stored);
+        verify(controller).validateAndUpdatePassword("pw1", "pw1", stored);
         verify(userRepository).save(stored);
     }
 
@@ -782,5 +784,183 @@ class AccountControllerTest {
         // Assert
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(1985, response.getBody());
+    }
+
+    @Test
+    void validateUserDetails_nullOrBadEmail_returnsBadRequest() {
+        // null email
+        ResponseEntity<String> r1 = controller.validateUserDetails(null, "user", "2000-01-01");
+        assertEquals(400, r1.getStatusCodeValue());
+        assertEquals("Enter a valid email address.", r1.getBody());
+
+        // malformed email
+        ResponseEntity<String> r2 = controller.validateUserDetails("not-an-email", "user", "2000-01-01");
+        assertEquals(400, r2.getStatusCodeValue());
+        assertEquals("Enter a valid email address.", r2.getBody());
+    }
+
+    @Test
+    void validateUserDetails_nullOrEmptyUsername_returnsBadRequest() {
+        // null username
+        ResponseEntity<String> r1 = controller.validateUserDetails("a@b.com", null, "2000-01-01");
+        assertEquals(400, r1.getStatusCodeValue());
+        assertEquals("Username is required.", r1.getBody());
+
+        // empty username
+        ResponseEntity<String> r2 = controller.validateUserDetails("a@b.com", "   ", "2000-01-01");
+        assertEquals(400, r2.getStatusCodeValue());
+        assertEquals("Username is required.", r2.getBody());
+    }
+
+    @Test
+    void validateUserDetails_invalidDateOfBirth_returnsBadRequest() {
+        // bad date
+        ResponseEntity<String> r = controller.validateUserDetails("a@b.com", "user", "not-a-date");
+        assertEquals(400, r.getStatusCodeValue());
+        assertEquals("Invalid date format. Use YYYY-MM-DD.", r.getBody());
+    }
+
+    @Test
+    void validateUserDetails_emptyOrNullDob_noError() {
+        // empty string
+        assertNull(controller.validateUserDetails("a@b.com", "user", ""));
+        // blank whitespace
+        assertNull(controller.validateUserDetails("a@b.com", "user", "   "));
+        // null
+        assertNull(controller.validateUserDetails("a@b.com", "user", null));
+    }
+
+    @Test
+    void validateUniqueUsername_whenUsernameNotTaken_returnsNull() {
+        // Arrange
+        User currentUser = new User();
+        currentUser.setId(10L);
+
+        when(userRepository.findByUsername("newUser"))
+            .thenReturn(Optional.empty());
+
+        // Act
+        ResponseEntity<String> resp = controller.validateUniqueUsername("newUser", currentUser);
+
+        // Assert
+        assertNull(resp, "Should allow a username not present in the repo");
+    }
+
+    @Test
+    void validateUniqueUsername_whenUsernameTakenByOther_returnsBadRequest() {
+        // Arrange
+        User currentUser = new User();
+        currentUser.setId(10L);
+
+        User other = new User();
+        other.setId(20L);
+        other.setUsername("taken");
+
+        when(userRepository.findByUsername("taken"))
+            .thenReturn(Optional.of(other));
+
+        // Act
+        ResponseEntity<String> resp = controller.validateUniqueUsername("taken", currentUser);
+
+        // Assert
+        assertNotNull(resp, "Should reject a username already taken by someone else");
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals(
+            "Username is already taken. Please choose another one.",
+            resp.getBody()
+        );
+    }
+
+    @Test
+    void validateUniqueUsername_whenUsernameTakenBySelf_returnsNull() {
+        // Arrange
+        User currentUser = new User();
+        currentUser.setId(10L);
+        currentUser.setUsername("me");
+
+        // Repo returns user with same ID
+        when(userRepository.findByUsername("me"))
+            .thenReturn(Optional.of(currentUser));
+
+        // Act
+        ResponseEntity<String> resp = controller.validateUniqueUsername("me", currentUser);
+
+        // Assert
+        assertNull(resp, "Should allow keeping the same username for the current user");
+    }
+
+    @Test
+    void validateAndUpdatePassword_whenPasswordsDoNotMatch_returnsBadRequest() {
+        User user = new User();
+        // Act
+        ResponseEntity<String> resp =
+            controller.validateAndUpdatePassword("Password1!", "Different1!", user);
+
+        // Assert
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("Passwords do not match.", resp.getBody());
+        // Ensure we never called encode or updated the hash
+        verify(passwordEncoder, never()).encode(anyString());
+        assertNull(user.getPasswordHash());
+    }
+
+    @Test
+    void validateAndUpdatePassword_whenPasswordTooWeak_returnsBadRequest() {
+        User user = new User();
+        // A matching but too‐weak password (no uppercase, no special char, too short)
+        String weak = "weakpw1";
+        ResponseEntity<String> resp =
+            controller.validateAndUpdatePassword(weak, weak, user);
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertTrue(resp.getBody().startsWith("Password must be at least 8 characters long"),
+                   "Should return the strength‐error message");
+        verify(passwordEncoder, never()).encode(anyString());
+        assertNull(user.getPasswordHash());
+    }
+
+    @Test
+    void validateAndUpdatePassword_whenPasswordValid_updatesUserAndReturnsNull() {
+        User user = new User();
+        String raw = "Str0ng@Pass";
+        // stub encoding
+        when(passwordEncoder.encode(raw)).thenReturn("ENCODED");
+
+        ResponseEntity<String> resp =
+            controller.validateAndUpdatePassword(raw, raw, user);
+
+        // Should be no error
+        assertNull(resp);
+        // Should have updated the user's hash
+        assertEquals("ENCODED", user.getPasswordHash());
+        verify(passwordEncoder).encode(raw);
+    }
+
+    @Test
+    void validateAndUpdateDateOfBirth_withValidDate_setsDobAndReturnsNull() {
+        User user = new User();
+
+        ResponseEntity<String> resp =
+            controller.validateAndUpdateDateOfBirth("2000-02-29", user);
+
+        // Should be no error
+        assertNull(resp, "Valid date should return null");
+
+        // User's dateOfBirth should be set correctly
+        assertEquals(LocalDate.of(2000, 2, 29), user.getDateOfBirth());
+    }
+
+    @Test
+    void validateAndUpdateDateOfBirth_withInvalidDate_returnsBadRequest() {
+        User user = new User();
+
+        ResponseEntity<String> resp =
+            controller.validateAndUpdateDateOfBirth("not-a-date", user);
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("Invalid date format. Use YYYY-MM-DD.", resp.getBody());
+
+        // Should not have modified the user
+        assertNull(user.getDateOfBirth());
     }
 }
