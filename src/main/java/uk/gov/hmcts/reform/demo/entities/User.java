@@ -16,7 +16,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 @Entity
 @Table(name = "users")
-public class User implements UserDetails {  // Now implements UserDetails
+public class User implements UserDetails {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,7 +27,6 @@ public class User implements UserDetails {  // Now implements UserDetails
     @Column(nullable = false, unique = true)
     private String email;
 
-    // We map the passwordHash to the password used by UserDetails.
     @Column(nullable = false)
     private String passwordHash;
 
@@ -43,8 +42,6 @@ public class User implements UserDetails {  // Now implements UserDetails
     @Column(nullable = false, updatable = false)
     private LocalDate createdAt = LocalDate.now();
 
-    // --- JPA Getters and Setters ---
-
     public Long getId() {
         return id;
     }
@@ -53,7 +50,6 @@ public class User implements UserDetails {  // Now implements UserDetails
         this.id = id;
     }
 
-    // Note: getUsername() is defined below for UserDetails, so no separate getter is needed.
     public void setUsername(String username) {
         this.username = username;
     }
@@ -102,62 +98,23 @@ public class User implements UserDetails {  // Now implements UserDetails
         return createdAt;
     }
 
-    // --- Implementation of UserDetails methods ---
-
-    /**
-     * Return the authorities granted to the user. Here we assign ROLE_ADMIN if isAdmin is true,
-     * otherwise ROLE_USER.
-     */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         String role = Boolean.TRUE.equals(isAdmin) ? "ROLE_ADMIN" : "ROLE_USER";
         return Collections.singleton(new SimpleGrantedAuthority(role));
     }
 
-    /**
-     * Return the password used for authentication.
-     */
     @Override
     public String getPassword() {
         return passwordHash;
     }
 
-    /**
-     * Return the username used to authenticate the user.
-     */
     @Override
     public String getUsername() {
         return username;
     }
 
-    /**
-     * Indicates whether the user's account has expired.
-     */
-    @Override
-    public boolean isAccountNonExpired() {
-        return true; // Adjust if you add account expiration logic
-    }
 
-    /**
-     * Indicates whether the user is locked or unlocked.
-     */
-    @Override
-    public boolean isAccountNonLocked() {
-        return true; // Adjust if you add locking logic
-    }
-
-    /**
-     * Indicates whether the user's credentials (password) have expired.
-     */
-    @Override
-    public boolean isCredentialsNonExpired() {
-        return true; // Adjust if you add credential expiration logic
-    }
-
-    /**
-     * Indicates whether the user is enabled or disabled.
-     * Here we use the canLogin flag.
-     */
     @Override
     public boolean isEnabled() {
         return canLogin;
@@ -174,4 +131,6 @@ public class User implements UserDetails {  // Now implements UserDetails
     public void setCreatedAt(LocalDate createdAt) {
         this.createdAt = createdAt;
     }
+
+
 }

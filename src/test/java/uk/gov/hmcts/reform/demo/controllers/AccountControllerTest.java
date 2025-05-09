@@ -13,6 +13,11 @@ import org.springframework.context.MessageSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.context.i18n.LocaleContextHolder;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import uk.gov.hmcts.reform.demo.dto.AccountSummary;
 import uk.gov.hmcts.reform.demo.dto.PendingRequestSummary;
@@ -32,6 +37,7 @@ import static org.mockito.Mockito.*;
 class AccountControllerTest {
 
     @InjectMocks
+    @Spy
     private AccountController controller;
 
     @Mock
@@ -468,5 +474,138 @@ class AccountControllerTest {
         // then delete the user
         inOrder.verify(userRepository).delete(user);
         inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void whenNoPrincipal_then401() {
+        ResponseEntity<String> resp = controller.updateUser(
+            null,
+            Map.of(),
+            new MockHttpServletRequest(),
+            new MockHttpServletResponse()
+        );
+        assertEquals(401, resp.getStatusCodeValue());
+        assertEquals("User not authenticated.", resp.getBody());
+    }
+
+    @Test
+    void whenUserNotInDatabase_then400() {
+        User principal = new User();
+        principal.setId(99L);
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        ResponseEntity<String> resp = controller.updateUser(
+            principal,
+            Map.of("username", "x", "email", "y", "dateOfBirth", "2000-01-01"),
+            new MockHttpServletRequest(),
+            new MockHttpServletResponse()
+        );
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("User not found.", resp.getBody());
+        verify(userRepository).findById(99L);
+    }
+
+    @Test
+    void whenDetailsValidationFails_thenReturnsThatResponse() throws Exception {
+        User principal = new User();
+        principal.setId(1L);
+        User stored = new User();
+        stored.setId(1L);
+
+        when(userRepository.findById(1L)).thenReturn(Optional.of(stored));
+        // stub out the private validator to return a custom bad-request
+        doReturn(ResponseEntity.badRequest().body("bad details"))
+            .when(controller)
+            .validateUserDetails(anyString(), anyString(), anyString());
+
+        Map<String,String> body = Map.of(
+            "username", "foo",
+            "email", "bar",
+            "dateOfBirth", "2000-01-01"
+        );
+
+        ResponseEntity<String> resp = controller.updateUser(
+            principal,
+            body,
+            new MockHttpServletRequest(),
+            new MockHttpServletResponse()
+        );
+
+        assertEquals(400, resp.getStatusCodeValue());
+        assertEquals("bad details", resp.getBody());
+        // ensure we never get as far as saving
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    void whenValidWithoutPassword_thenUpdatesAndRefreshesAuth() throws Exception {
+        User principal = new User();
+        principal.setId(2L);
+        User stored = new User();
+        stored.setId(2L);
+
+        when(userRepository.findById(2L)).thenReturn(Optional.of(stored));
+        doReturn(null).when(controller).validateUserDetails(anyString(), anyString(), anyString());
+        doReturn(null).when(controller).validateUniqueUsername(anyString(), eq(stored));
+        doReturn(null).when(controller).validateAndUpdateDateOfBirth(anyString(), eq(stored));
+        // note: no password in map → skip password branch
+
+        Map<String,String> body = new HashMap<>();
+        body.put("username", "newuser");
+        body.put("email", "new@example.com");
+        body.put("dateOfBirth", "2000-01-01");
+
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        ResponseEntity<String> resp = controller.updateUser(principal, body, req, res);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("Account updated successfully.", resp.getBody());
+
+        // Verify the user was saved with updated fields
+        assertEquals("newuser", stored.getUsername());
+        assertEquals("new@example.com", stored.getEmail());
+        verify(userRepository).save(stored);
+
+        // Check that SecurityContext was refreshed to use the updated user
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        assertTrue(auth instanceof UsernamePasswordAuthenticationToken);
+        assertSame(stored, auth.getPrincipal());
+    }
+
+    @Test
+    void whenValidWithPassword_thenInvokesPasswordUpdate() throws Exception {
+        User principal = new User();
+        principal.setId(3L);
+        User stored = new User();
+        stored.setId(3L);
+
+        when(userRepository.findById(3L)).thenReturn(Optional.of(stored));
+        doReturn(null).when(controller).validateUserDetails(anyString(), anyString(), anyString());
+        doReturn(null).when(controller).validateUniqueUsername(anyString(), eq(stored));
+        doReturn(null).when(controller).validateAndUpdateDateOfBirth(anyString(), eq(stored));
+        // stub password-update to succeed
+        doReturn(null).when(controller).validateAndUpdatePassword(eq("pw1"), eq("pw1"), eq(stored));
+
+        Map<String,String> body = new HashMap<>();
+        body.put("username", "u3");
+        body.put("email", "e3@example.com");
+        body.put("dateOfBirth", "1995-05-05");
+        body.put("password", "pw1");
+        body.put("confirmPassword", "pw1");
+
+        MockHttpServletRequest req = new MockHttpServletRequest();
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        ResponseEntity<String> resp = controller.updateUser(principal, body, req, res);
+
+        assertEquals(200, resp.getStatusCodeValue());
+        assertEquals("Account updated successfully.", resp.getBody());
+
+        // Verify the private validateAndUpdatePassword was invoked
+        verify(controller).validateAndUpdatePassword("pw1","pw1",stored);
+        verify(userRepository).save(stored);
     }
 }

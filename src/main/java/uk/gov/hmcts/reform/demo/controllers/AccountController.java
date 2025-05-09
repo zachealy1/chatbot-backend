@@ -486,7 +486,7 @@ public class AccountController {
     /**
      * Validates the email and username fields.
      */
-    private ResponseEntity<String> validateUserDetails(String email, String username, String dateOfBirthStr) {
+    ResponseEntity<String> validateUserDetails(String email, String username, String dateOfBirthStr) {
         if (email == null || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
             return badRequest().body("Enter a valid email address.");
         }
@@ -507,7 +507,7 @@ public class AccountController {
     /**
      * Ensures that the new username is unique.
      */
-    private ResponseEntity<String> validateUniqueUsername(String username, User currentUser) {
+    ResponseEntity<String> validateUniqueUsername(String username, User currentUser) {
         Optional<User> existingUser = userRepository.findByUsername(username);
         if (existingUser.isPresent() && !existingUser.get().getId().equals(currentUser.getId())) {
             return badRequest().body("Username is already taken. Please choose another one.");
@@ -519,7 +519,7 @@ public class AccountController {
     /**
      * Validates and updates the password if provided.
      */
-    private ResponseEntity<String> validateAndUpdatePassword(String password, String confirmPassword, User user) {
+    ResponseEntity<String> validateAndUpdatePassword(String password, String confirmPassword, User user) {
         if (password != null && confirmPassword != null) {
             if (!password.equals(confirmPassword)) {
                 return badRequest().body("Passwords do not match.");
@@ -539,7 +539,7 @@ public class AccountController {
         return null;
     }
 
-    private ResponseEntity<String> validateAndUpdateDateOfBirth(String dateOfBirthStr, User user) {
+    ResponseEntity<String> validateAndUpdateDateOfBirth(String dateOfBirthStr, User user) {
         LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
         if (dateOfBirth == null) {
             return badRequest().body("Invalid date format. Use YYYY-MM-DD.");
