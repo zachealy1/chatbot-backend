@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.LocalDateTime;
+import java.time.Month;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -271,6 +273,106 @@ class ChatControllerTest {
         inOrder.verify(chatService).findChatById(chatId);
         inOrder.verify(chatService).getMessagesForChat(chat);
         inOrder.verifyNoMoreInteractions();
+    }
+
+    @Test
+    void whenCurrentUserIsNull_thenReturnsBadRequest() {
+        // Act
+        ResponseEntity<?> resp = controller.getChatsForUser(null);
+
+        // Assert
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertTrue(((Map<?,?>)resp.getBody()).containsKey("error"));
+        assertEquals("User not authenticated.", ((Map<?,?>)resp.getBody()).get("error"));
+
+        verifyNoInteractions(chatService);
+    }
+
+    @Test
+    void whenServiceThrowsException_thenReturnsBadRequest() {
+        // Arrange
+        User user = new User();
+        user.setId(7L);
+        when(chatService.getChatsForUser(user)).thenThrow(new RuntimeException("db down"));
+
+        // Act
+        ResponseEntity<?> resp = controller.getChatsForUser(user);
+
+        // Assert
+        assertEquals(HttpStatus.BAD_REQUEST, resp.getStatusCode());
+        assertEquals("Unable to retrieve chats for the user.",
+                     ((Map<?,?>)resp.getBody()).get("error"));
+
+        verify(chatService).getChatsForUser(user);
+    }
+
+    @Test
+    void whenChatsExist_thenReturnsFormattedDtos() {
+        // Arrange
+        User user = new User();
+        user.setId(5L);
+
+        Chat c1 = new Chat();
+        c1.setId(101L);
+        c1.setDescription("First chat");
+        c1.setCreatedAt(LocalDateTime.of(2021, Month.MARCH, 15, 9, 30));
+
+        Chat c2 = new Chat();
+        c2.setId(202L);
+        c2.setDescription("Second chat");
+        c2.setCreatedAt(LocalDateTime.of(2022, Month.DECEMBER, 1, 18, 5));
+
+        when(chatService.getChatsForUser(user)).thenReturn(List.of(c1, c2));
+
+        // Act
+        ResponseEntity<?> resp = controller.getChatsForUser(user);
+
+        // Assert
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> body = (List<Map<String, Object>>) resp.getBody();
+        assertNotNull(body);
+        assertEquals(2, body.size());
+
+        Map<String, Object> dto1 = body.get(0);
+        assertEquals(101L, dto1.get("id"));
+        assertEquals("First chat", dto1.get("description"));
+        assertEquals("15 Mar 2021, 09:30", dto1.get("createdAt"));
+
+        Map<String, Object> dto2 = body.get(1);
+        assertEquals(202L, dto2.get("id"));
+        assertEquals("Second chat", dto2.get("description"));
+        assertEquals("01 Dec 2022, 18:05", dto2.get("createdAt"));
+
+        verify(chatService).getChatsForUser(user);
+        verifyNoMoreInteractions(chatService);
+    }
+
+    @Test
+    void whenChatCreatedAtIsNull_thenDtoHasNullCreatedAt() {
+        // Arrange
+        User user = new User();
+        user.setId(3L);
+
+        Chat c = new Chat();
+        c.setId(303L);
+        c.setDescription("No date chat");
+        c.setCreatedAt(null);
+
+        when(chatService.getChatsForUser(user)).thenReturn(List.of(c));
+
+        // Act
+        ResponseEntity<?> resp = controller.getChatsForUser(user);
+
+        // Assert
+        assertEquals(HttpStatus.OK, resp.getStatusCode());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> body = (List<Map<String, Object>>) resp.getBody();
+        assertNotNull(body);
+        assertEquals(1, body.size());
+        assertNull(body.get(0).get("createdAt"));
+
+        verify(chatService).getChatsForUser(user);
     }
 
 }

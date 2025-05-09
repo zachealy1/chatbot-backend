@@ -106,7 +106,9 @@ public class Chat {
         return createdAt;
     }
 
-    // No setter for 'createdAt' as it's set at creation.
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
 
     public Set<Message> getMessages() {
         return messages;
@@ -116,21 +118,11 @@ public class Chat {
         this.messages = messages;
     }
 
-    /**
-     * Helper method to add a message to the chat.
-     *
-     * @param message The message to add.
-     */
     public void addMessage(Message message) {
         messages.add(message);
         message.setChat(this);
     }
 
-    /**
-     * Helper method to remove a message from the chat.
-     *
-     * @param message The message to remove.
-     */
     public void removeMessage(Message message) {
         messages.remove(message);
         message.setChat(null);
