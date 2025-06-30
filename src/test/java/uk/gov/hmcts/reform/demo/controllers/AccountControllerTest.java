@@ -551,7 +551,7 @@ class AccountControllerTest {
         doReturn(null).when(controller).validateUserDetails(anyString(), anyString(), anyString());
         doReturn(null).when(controller).validateUniqueUsername(anyString(), eq(stored));
         doReturn(null).when(controller).validateAndUpdateDateOfBirth(anyString(), eq(stored));
-        // note: no password in map → skip password branch
+        // note: no password in map -> skip password branch
 
         Map<String, String> body = new HashMap<>();
         body.put("username", "newuser");

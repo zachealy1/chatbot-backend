@@ -76,13 +76,13 @@ public class LoginController {
         String username = credentials.getUsername();
         String password = credentials.getPassword();
 
-        // 1) Basic non-empty check
+        // Basic non-empty check
         if (!isValidCredentials(username, password)) {
             String msg = messages.getMessage("login.required", null, locale);
             return ResponseEntity.badRequest().body(msg);
         }
 
-        // 2) Lookup user
+        // Lookup user
         Optional<User> optionalUser = userRepository.findByUsername(username);
         if (optionalUser.isEmpty()) {
             String msg = messages.getMessage("login.invalid", null, locale);
@@ -90,14 +90,14 @@ public class LoginController {
         }
         User user = optionalUser.get();
 
-        // 3) Authorization (admin vs normal)
+        // Authorization (admin vs normal)
         if (!isAuthorizedUser(user, isAdminLogin)) {
             String key = isAdminLogin ? "login.admin.denied" : "login.user.denied";
             String msg = messages.getMessage(key, null, locale);
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(msg);
         }
 
-        // 4) Password check
+        // Password check
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             String msg = messages.getMessage("login.invalid", null, locale);
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(msg);
@@ -121,7 +121,7 @@ public class LoginController {
         logger.info("Authentication set for user: {}", username);
         // -----------------------------------------------------
 
-        // 5) Success path: localized success message
+        // Success path: localized success message
         String successKey = isAdminLogin ? "login.success.admin" : "login.success.user";
         String successMsg = messages.getMessage(successKey, null, locale);
 

@@ -71,28 +71,28 @@ class StatisticsControllerTest {
     void getUserActivity_variousAges_bucketedCorrectly() {
         LocalDate today = LocalDate.now();
 
-        // User A: age 25 → "20 to 30"
+        // User A: age 25 -> "20 to 30"
         User u25 = new User();
         u25.setId(1L);
         u25.setDateOfBirth(today.minusYears(25));
         LocalDateTime now = LocalDateTime.now().truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
         Session s25 = new Session("t1", u25, now, now.plusHours(1));
 
-        // User B: age 35 → "31 to 40"
+        // User B: age 35 -> "31 to 40"
         User u35 = new User();
         u35.setId(2L);
         u35.setDateOfBirth(today.minusYears(35));
         LocalDateTime now2 = now.plusMinutes(5);
         Session s35 = new Session("t2", u35, now2, now2.plusHours(1));
 
-        // User C: age 45 → "41 to 50"
+        // User C: age 45 -> "41 to 50"
         User u45 = new User();
         u45.setId(3L);
         u45.setDateOfBirth(today.minusYears(45));
         LocalDateTime now3 = now.plusMinutes(10);
         Session s45 = new Session("t3", u45, now3, now3.plusHours(1));
 
-        // User D: age 55 → "51 and over"
+        // User D: age 55 -> "51 and over"
         User u55 = new User();
         u55.setId(4L);
         u55.setDateOfBirth(today.minusYears(55));

@@ -329,7 +329,7 @@ public class AccountController {
         String confirmPassword = userDetails.get("confirmPassword");
         String dateOfBirthStr  = userDetails.get("dateOfBirth");
 
-        // 1) required-fields check
+        // required-fields check
         String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
         if (validationError != null) {
             // validationError should now be a message key, e.g. "error.required.fields"
@@ -337,14 +337,14 @@ public class AccountController {
             return ResponseEntity.badRequest().body(msg);
         }
 
-        // 2) parse DOB
+        // parse DOB
         LocalDate dateOfBirth = parseDateOfBirth(dateOfBirthStr);
         if (dateOfBirth == null) {
             String msg = messages.getMessage("error.invalid.date", null, locale);
             return ResponseEntity.badRequest().body(msg);
         }
 
-        // 3) check existence
+        // check existence
         String existenceError = checkUserExistence(username, email);
         if (existenceError != null) {
             // existenceError should now be a key, e.g. "error.user.exists"
@@ -352,7 +352,7 @@ public class AccountController {
             return ResponseEntity.badRequest().body(msg);
         }
 
-        // 4) create user + account request
+        // create user + account request
         User newUser = createNewUser(username, email, passwordEncoder.encode(password), dateOfBirth, isAdmin);
         userRepository.save(newUser);
 
@@ -361,7 +361,7 @@ public class AccountController {
         req.setStatus(AccountRequest.Status.PENDING);
         accountRequestRepository.save(req);
 
-        // 5) success message
+        // success message
         String successKey = isAdmin ? "success.admin.registered" : "success.user.registered";
         String successMsg = messages.getMessage(successKey, null, locale);
         return ResponseEntity.ok(successMsg);

@@ -44,7 +44,7 @@ public class StatisticsController {
     public ResponseEntity<List<SessionActivity>> getUserActivity() {
         List<SessionActivity> activities = sessionRepository.findAll().stream()
             .map(session -> {
-                // 1) find the user linked to this session
+                // find the user linked to this session
                 //    (assumes Session has a getUserId() or similar)
                 var userOpt = userRepository.findById(session.getUser().getId());
                 if (userOpt.isEmpty()) {
@@ -53,10 +53,10 @@ public class StatisticsController {
                 }
                 User user = userOpt.get();
 
-                // 2) compute their age
+                // compute their age
                 int age = Period.between(user.getDateOfBirth(), LocalDate.now()).getYears();
 
-                // 3) bucket into a group
+                // bucket into a group
                 String bucket;
                 if (age <= 30) {
                     bucket = "20 to 30";
