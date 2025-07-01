@@ -4,6 +4,7 @@ package uk.gov.hmcts.reform.demo.dto;
  * Data Transfer Object for login requests.
  */
 public class LoginRequest {
+
     private String username;
     private String password;
 

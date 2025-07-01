@@ -83,7 +83,7 @@ public class StatisticsController {
     @GetMapping("/chat-category-breakdown")
     public ResponseEntity<Map<String, Map<String, Double>>> getChatCategoryBreakdown() {
         List<User> users = userRepository.findAll();
-        List<Chat>  chats = chatRepository.findAll();
+        List<Chat> chats = chatRepository.findAll();
         LocalDate today = LocalDate.now();
 
         // build overall user‐buckets
@@ -94,7 +94,7 @@ public class StatisticsController {
 
         // take top 6
         List<String> topCats = categoryCounts.entrySet().stream()
-            .sorted(Map.Entry.<String,Long>comparingByValue(Comparator.reverseOrder()))
+            .sorted(Map.Entry.<String, Long>comparingByValue(Comparator.reverseOrder()))
             .limit(6)
             .map(Map.Entry::getKey)
             .toList();

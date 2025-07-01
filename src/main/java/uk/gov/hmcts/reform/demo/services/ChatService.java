@@ -93,6 +93,7 @@ public class ChatService {
 
     /**
      * Deletes the provided chat.
+     *
      * @param chat The Chat entity to delete.
      */
     @Transactional

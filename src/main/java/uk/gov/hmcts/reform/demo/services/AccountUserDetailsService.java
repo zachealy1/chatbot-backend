@@ -20,8 +20,8 @@ public class AccountUserDetailsService implements UserDetailsService {
     }
 
     /**
-     * Loads the user from the database using their username.
-     * You can also modify this method to load by email if needed.
+     * Loads the user from the database using their username. You can also modify this method to load by email if
+     * needed.
      */
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {

@@ -200,8 +200,10 @@ public class AccountController {
         String newUsername = userDetailsMap.get("username");
         String newEmail = userDetailsMap.get("email");
         String dateOfBirthStr = userDetailsMap.get("dateOfBirth");
-        logger.info("Received update request with newUsername: '{}', newEmail: '{}', dateOfBirth: '{}'",
-                    newUsername, newEmail, dateOfBirthStr);
+        logger.info(
+            "Received update request with newUsername: '{}', newEmail: '{}', dateOfBirth: '{}'",
+            newUsername, newEmail, dateOfBirthStr
+        );
 
         // Validate basic details
         ResponseEntity<String> detailsValidation = validateUserDetails(newEmail, newUsername, dateOfBirthStr);
@@ -323,11 +325,11 @@ public class AccountController {
     private ResponseEntity<String> register(Map<String, String> userDetails, boolean isAdmin) {
         Locale locale = LocaleContextHolder.getLocale();
 
-        String username        = userDetails.get("username");
-        String email           = userDetails.get("email");
-        String password        = userDetails.get("password");
+        String username = userDetails.get("username");
+        String email = userDetails.get("email");
+        String password = userDetails.get("password");
         String confirmPassword = userDetails.get("confirmPassword");
-        String dateOfBirthStr  = userDetails.get("dateOfBirth");
+        String dateOfBirthStr = userDetails.get("dateOfBirth");
 
         // required-fields check
         String validationError = validateUserInput(username, email, password, confirmPassword, dateOfBirthStr);
@@ -529,7 +531,7 @@ public class AccountController {
                 return badRequest().body(
                     "Password must be at least 8 characters long and include an uppercase letter, "
                         + "a lowercase letter, a number, and a special character."
-                                        );
+                );
             }
 
             // Hash and update the password

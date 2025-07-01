@@ -10,6 +10,7 @@ import java.util.Optional;
 
 @Repository
 public interface AccountRequestRepository extends JpaRepository<AccountRequest, Long> {
+
     Optional<AccountRequest> findByUser(User user);
 
     List<AccountRequest> findByStatus(AccountRequest.Status status);
